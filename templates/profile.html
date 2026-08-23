@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}My Profile — LifeLink{% endblock %}
+{% block content %}
+<h2>My Profile</h2>
+
+<div class="card-grid">
+  <div class="panel-card">
+    <h3>Account Information</h3>
+    <form method="POST">
+      <input type="hidden" name="form_type" value="update_profile">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" name="name" value="{{ current_user.name }}" required>
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" value="{{ current_user.email }}" disabled style="background:#eee;">
+        <span class="hint">Cannot be changed</span>
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <input type="text" value="{{ current_user.role|capitalize }}" disabled style="background:#eee;">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Blood Group</label>
+          <select name="blood_group">
+            {% for bg in blood_groups %}
+            <option value="{{ bg }}" {% if current_user.blood_group == bg %}selected{% endif %}>{{ bg }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Gender</label>
+          <select name="gender">
+            <option value="M" {% if current_user.gender == 'M' %}selected{% endif %}>Male</option>
+            <option value="F" {% if current_user.gender == 'F' %}selected{% endif %}>Female</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Age</label>
+          <input type="number" name="age" value="{{ current_user.age or '' }}" min="1" max="120">
+        </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="text" name="phone" value="{{ current_user.phone or '' }}"
+                 pattern="^\d{11}$" maxlength="11"
+                 title="Phone number must be exactly 11 digits">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Location</label>
+        <div class="loc-search-row">
+          <input type="text" id="locationSearch" name="location"
+                 value="{{ current_user.location or '' }}"
+                 placeholder="Search your area, e.g. Mirpur, Badda, Dhanmondi, Uttara"
+                 autocomplete="off">
+          <button type="button" id="useMyLocation" class="btn btn-outline loc-gps-btn"
+                  title="Detect your current location with GPS">
+            &#128205; Use My Location
+          </button>
+        </div>
+        <div id="locationResults" class="loc-dropdown" hidden></div>
+        <span id="locationStatus" class="loc-status"></span>
+        <span class="hint" style="display:block; margin-left:0; margin-top:0.2rem;">
+          Search and pick your area (coordinates are detected automatically), or press
+          "Use My Location" — the browser will ask for your location permission. Manual
+          latitude/longitude entry is no longer needed.
+        </span>
+      </div>
+      <input type="hidden" id="latitude" name="latitude" value="{{ current_user.latitude or '' }}">
+      <input type="hidden" id="longitude" name="longitude" value="{{ current_user.longitude or '' }}">
+      <div id="savedLocation" class="loc-saved" {% if not current_user.location and current_user.latitude is none %}hidden{% endif %}>
+        <strong>Saved location:</strong>
+        <span id="savedLocationName">{{ current_user.location or '—' }}</span>
+        <span id="savedLocationCoords" class="loc-coords">
+          {% if current_user.latitude is not none and current_user.longitude is not none %}
+            ({{ "%.4f"|format(current_user.latitude) }}, {{ "%.4f"|format(current_user.longitude) }})
+          {% endif %}
+        </span>
+      </div>
+      {% if current_user.role == 'donor' %}
+      <div class="form-row">
+        <div class="form-group">
+          <label>Preferred Contact Method</label>
+          <select name="preferred_contact_method">
+            {% for m in ['Phone', 'SMS', 'Email'] %}
+            <option value="{{ m }}" {% if (current_user.preferred_contact_method or 'Phone') == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Last Donation Date</label>
+          <input type="date" name="last_donation_date"
+                 value="{{ current_user.last_donation_date.strftime('%Y-%m-%d') if current_user.last_donation_date else '' }}">
+          <span class="hint">Saves a history record; eligibility recalculates automatically</span>
+        </div>
+      </div>
+      <p style="font-size:0.8rem; color:var(--muted); margin-top:0.2rem;">
+        Donations recorded: <strong>{{ donation_view.total_donations if donation_view else (current_user.donation_count or 0) }}</strong> &middot;
+        Total bags: <strong>{{ donation_view.total_bags if donation_view else (current_user.donation_count or 0) }}</strong> &middot;
+        Reliability score: <strong>{{ "%.0f"|format((current_user.reliability_score or 0.5) * 100) }}%</strong>
+      </p>
+      {% endif %}
+      <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+    </form>
+  </div>
+
+  <div class="panel-card">
+    <h3>Change Password</h3>
+    <form method="POST" style="margin-top:1rem;">
+      <input type="hidden" name="form_type" value="change_password">
+      <div class="form-group">
+        <label>Current Password</label>
+        <input type="password" name="current_password" required>
+      </div>
+      <div class="form-group">
+        <label>New Password</label>
+        <input type="password" name="new_password" required minlength="8">
+        <span class="hint">Min 8 chars, uppercase, lowercase, digit, special char</span>
+      </div>
+      <div class="form-group">
+        <label>Confirm New Password</label>
+        <input type="password" name="confirm_password" required minlength="8">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Change Password</button>
+    </form>
+
+    <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid var(--line);">
+      <h3>Screening Status</h3>
+      {% if current_user.last_donation_eligible is not none %}
+        {% if current_user.last_donation_eligible %}
+          <p><span class="badge badge-low" style="font-size:0.85rem;">Eligible to Donate</span> (confidence: {{ current_user.last_screening_confidence }}%)</p>
+        {% else %}
+          <p><span class="badge badge-critical" style="font-size:0.85rem;">Not Eligible</span> (confidence: {{ current_user.last_screening_confidence }}%)</p>
+        {% endif %}
+        <a href="{{ url_for('health_screening') }}" class="btn btn-outline btn-sm">Run Screening Again</a>
+      {% else %}
+        <p style="color:var(--muted); font-size:0.9rem;">You haven't completed a health screening yet.</p>
+        <a href="{{ url_for('health_screening') }}" class="btn btn-outline btn-sm">Run Screening</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="panel-card" style="margin-top:1.5rem; border-color:var(--review); background:var(--review-bg);">
+  <h3 style="color:var(--review);">Blood Group Verification</h3>
+  <p style="font-size:0.85rem; color:var(--muted); margin:0.3rem 0 0.9rem;">
+    Upload a photo of your blood-group / donor card and the AI will read the blood
+    group, store it, and link it to your account. Only valid groups are stored;
+    uncertain, conflicting, or blurry reads are never guessed — they are flagged
+    for you to confirm manually.
+  </p>
+
+  <div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center; margin-bottom:0.9rem;">
+    <div>
+      {% if current_user.blood_group %}
+        <span class="bg-pill" style="font-size:1.05rem;">{{ current_user.blood_group }}</span>
+      {% else %}
+        <span class="badge badge-review">Blood group not set</span>
+      {% endif %}
+    </div>
+    <div>
+      {% if current_user.blood_group_verified %}
+        <span class="badge badge-low">&#10004; Verified</span>
+      {% elif current_user.blood_group_flagged %}
+        <span class="badge badge-critical">&#10060; Verification Required</span>
+      {% else %}
+        <span class="badge badge-medium">Auto-detected — awaiting confirmation</span>
+      {% endif %}
+      {% if current_user.blood_group_source %}
+        <span style="font-size:0.8rem; color:var(--muted); margin-left:0.4rem;">Source: {{ current_user.blood_group_source }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if current_user.blood_group_flagged %}
+  <div style="margin-bottom:0.9rem; padding:0.7rem 0.9rem; border-radius:8px; border-left:4px solid var(--critical); background:var(--critical-bg); color:var(--critical); font-size:0.9rem;">
+    {{ current_user.blood_group_flagged_reason or 'This blood group needs manual verification.' }}
+  </div>
+  {% endif %}
+
+  {% if current_user.blood_group_detected %}
+  <div style="font-size:0.88rem; color:var(--muted); margin-bottom:0.8rem;">
+    Last auto-detected: <strong>{{ current_user.blood_group_detected }}</strong>
+    {% if current_user.blood_group_detected_confidence is not none %}
+      ({{ "%.0f"|format(current_user.blood_group_detected_confidence * 100) }}% confidence)
+    {% endif %}
+    {% if current_user.blood_group_card_name %} &middot; Card name: {{ current_user.blood_group_card_name }}{% endif %}
+    {% if current_user.blood_group_card_id %} &middot; Card ID: {{ current_user.blood_group_card_id }}{% endif %}
+    {% if current_user.blood_group_detected_at %} &middot; Detected {{ current_user.blood_group_detected_at.strftime('%d %b %Y') }}{% endif %}
+  </div>
+  {% endif %}
+
+  {% if current_user.blood_group_image %}
+  <a href="{{ url_for('serve_blood_group_image', filename=current_user.blood_group_image) }}" target="_blank" title="View uploaded card image">
+    <img src="{{ url_for('serve_blood_group_image', filename=current_user.blood_group_image) }}" alt="Uploaded blood group card"
+         style="max-width:220px; max-height:160px; border:1px solid var(--line); border-radius:8px; margin-bottom:0.9rem;">
+  </a>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('profile_upload_blood_group') }}" enctype="multipart/form-data" style="margin-bottom:1rem;">
+    <div class="form-group" style="max-width:460px;">
+      <label>Upload Blood Group Card Image</label>
+      <input type="file" name="blood_group_image" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required>
+      <span class="hint">JPG, JPEG or PNG — a clear, well-lit photo of the card's blood group panel</span>
+    </div>
+    <button type="submit" class="btn btn-primary">Scan Blood Group Card</button>
+  </form>
+
+  {% if not current_user.blood_group_verified or current_user.blood_group_flagged %}
+  <form method="POST" action="{{ url_for('profile_confirm_blood_group') }}" style="border-top:1px solid var(--line); padding-top:1rem;">
+    <div class="form-row" style="max-width:600px;">
+      <div class="form-group">
+        <label>Confirm Your Blood Group</label>
+        <select name="blood_group" required>
+          {% for bg in blood_groups %}
+          <option value="{{ bg }}" {% if (current_user.blood_group_detected or current_user.blood_group) == bg %}selected{% endif %}>{{ bg }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="display:flex; align-items:flex-end;">
+        <button type="submit" class="btn btn-primary">Confirm &amp; Verify</button>
+      </div>
+    </div>
+    <span class="hint">Confirming marks the group as verified so it can be used when matching you with blood requests.</span>
+  </form>
+  {% endif %}
+</div>
+
+{% if current_user.role == 'donor' and donation_view %}
+<div class="panel-card" style="margin-top:1.5rem; border-color:var(--review); background:var(--review-bg);">
+  <h3 style="color:var(--review); margin-bottom:1rem;">Donation Summary</h3>
+  <div class="stats-grid" style="margin-top:0;">
+    <div class="stat-cell"><div class="stat-num">{{ donation_view.total_donations }}</div><div class="stat-label">Total Donations</div></div>
+    <div class="stat-cell"><div class="stat-num">{{ donation_view.total_bags }}</div><div class="stat-label">Total Bags Donated</div></div>
+    <div class="stat-cell"><div class="stat-num" style="font-size:1rem;">
+      {{ donation_view.status.last_donation_date.strftime('%d %b %Y') if donation_view.status.last_donation_date else '—' }}
+    </div><div class="stat-label">Last Donation Date</div></div>
+    <div class="stat-cell"><div class="stat-num" style="font-size:1rem;">
+      {{ donation_view.status.next_eligible_date.strftime('%d %b %Y') if donation_view.status.next_eligible_date else '—' }}
+    </div><div class="stat-label">Next Eligible Donation Date</div></div>
+  </div>
+  <div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center; margin-top:0.8rem;">
+    {% if donation_view.status.eligible %}
+      <span class="badge badge-low" style="font-size:0.95rem;">&#10004; Eligible to Donate</span>
+    {% else %}
+      <span class="badge badge-critical" style="font-size:0.95rem;">&#10060; Not Eligible</span>
+    {% endif %}
+    <span style="font-size:0.9rem; color:var(--muted);">
+      {{ donation_view.status.reason }}
+    </span>
+    <span class="badge badge-review" style="font-size:0.8rem;">
+      Waiting period: {{ interval_male }} days (male) / {{ interval_female }} days (female)
+    </span>
+    {% if not donation_view.status.eligible %}
+      <span class="badge badge-high" style="font-size:0.8rem;">
+        {% if donation_view.status.days_remaining == 0 %}Eligible today{% else %}{{ donation_view.status.days_remaining }} day(s) remaining until eligible{% endif %}
+      </span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Donation History</h3>
+  {% if donations %}
+  <table class="request-table" style="margin-top:0.8rem;">
+    <thead>
+      <tr><th>Date</th><th>Time</th><th>Blood Group</th><th>Bags</th><th>Donation Location</th><th>Next Eligible Date</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for d in donations %}
+      <tr>
+        <td>{{ d.donation_date.strftime('%d %B %Y') }}</td>
+        <td>{{ d.donation_time or '—' }}</td>
+        <td><span class="bg-pill">{{ d.blood_group }}</span></td>
+        <td>{{ d.bags }}</td>
+        <td>{{ d.donation_location or '—' }}</td>
+        <td>{{ d.next_eligible_date.strftime('%d %B %Y') if d.next_eligible_date else '—' }}</td>
+        <td><span class="badge badge-low" style="font-size:0.85rem;">{{ d.status }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted); font-size:0.9rem; margin-top:0.8rem;">
+    No donations recorded yet. Once a request you accepted is fulfilled, or an
+    admin records a donation, it will appear here.
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel — LifeLink{% endblock %}
+{% block content %}
+<h2>Admin Panel</h2>
+<p style="color: var(--muted); margin-bottom: 1.5rem;">Manage users, verify requests, and monitor platform-wide activity.</p>
+
+<div class="stats-grid" style="margin-top:0;">
+  <div class="stat-cell"><div class="stat-num">{{ stats.total_users }}</div><div class="stat-label">Total Users</div></div>
+  <div class="stat-cell"><div class="stat-num">{{ stats.total_donors }}</div><div class="stat-label">Donors</div></div>
+  <div class="stat-cell"><div class="stat-num">{{ stats.total_requests }}</div><div class="stat-label">Requests</div></div>
+  <div class="stat-cell critical"><div class="stat-num">{{ stats.critical }}</div><div class="stat-label">Critical</div></div>
+</div>
+<div class="stats-grid" style="margin-top:0;">
+  <div class="stat-cell"><div class="stat-num">{{ stats.pending }}</div><div class="stat-label">Pending</div></div>
+  <div class="stat-cell"><div class="stat-num">{{ stats.matched }}</div><div class="stat-label">Matched</div></div>
+  <div class="stat-cell"><div class="stat-num">{{ stats.fulfilled }}</div><div class="stat-label">Fulfilled</div></div>
+  <div class="stat-cell"><div class="stat-num">{{ stats.total_patients }}</div><div class="stat-label">Patients</div></div>
+</div>
+<div class="stats-grid" style="margin-top:0;">
+  <div class="stat-cell"><div class="stat-num">{{ stats.total_donations }}</div><div class="stat-label">Donation Records</div></div>
+  <div class="stat-cell"><div class="stat-num">{{ stats.total_bags }}</div><div class="stat-label">Total Bags Donated</div></div>
+  <div class="stat-cell"><a href="{{ url_for('admin_donations') }}" class="btn btn-sm btn-outline" style="margin-top:1.2rem;">Donation Ledger</a></div>
+  <div class="stat-cell"><a href="{{ url_for('admin_blood_groups') }}" class="btn btn-sm btn-outline" style="margin-top:1.2rem;">Review Blood Groups ({{ stats.bg_review_count }})</a></div>
+  <div class="stat-cell"><a href="{{ url_for('admin_import_donors_page') }}" class="btn btn-sm btn-outline" style="margin-top:1.2rem;">Import Donors</a></div>
+</div>
+
+<div class="card-grid" style="margin-top:1.5rem;">
+  <div class="panel-card">
+    <h3>Donation Eligibility Settings</h3>
+    <p style="font-size:0.85rem; color:var(--muted); margin:0.3rem 0 0.8rem;">
+      Minimum waiting period after a donation before a donor can give again.
+      Every donor's eligibility recalculates automatically from their history.
+    </p>
+    <form method="POST" action="{{ url_for('admin_update_settings') }}">
+      <div class="form-row" style="max-width:340px;">
+        <div class="form-group">
+          <label>Waiting period — Male (days)</label>
+          <input type="number" name="donation_interval_male" value="{{ interval_male }}" min="1" max="730" required>
+        </div>
+        <div class="form-group">
+          <label>Waiting period — Female (days)</label>
+          <input type="number" name="donation_interval_female" value="{{ interval_female }}" min="1" max="730" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+    </form>
+  </div>
+  <div class="panel-card">
+    <h3>Recent Donations</h3>
+    {% if recent_donations %}
+    <ul class="list-plain" style="font-size:0.88rem;">
+      {% for d in recent_donations %}
+      <li>
+        <a href="{{ url_for('admin_donor_donations', donor_id=d.donor.id) }}"><strong>{{ d.donor.name }}</strong></a>
+        donated {{ d.bags }} bag(s) of {{ d.blood_group }} on {{ d.donation_date.strftime('%d %b %Y') }}
+        <span style="color:var(--muted);">@ {{ d.donation_location or '—' }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p style="color:var(--muted); font-size:0.9rem;">No donations recorded yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card-grid" style="margin-top:1.5rem;">
+  <div class="panel-card">
+    <h3>Urgency Distribution</h3>
+    <canvas id="urgencyChart" height="200"></canvas>
+  </div>
+  <div class="panel-card">
+    <h3>Blood Group Demand</h3>
+    <canvas id="bloodChart" height="200"></canvas>
+  </div>
+</div>
+
+<h3 class="section-title" style="font-size:1.2rem; margin-top:2.5rem;">All Blood Requests</h3>
+<table class="request-table">
+  <thead>
+    <tr><th>Urgency</th><th>Patient</th><th>Group</th><th>Hospital</th><th>Status</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    {% for r in requests %}
+    <tr>
+      <td>
+        {% if r.urgency_level == 'Critical' %}<span class="badge badge-critical pulse">Critical</span>
+        {% elif r.urgency_level == 'High' %}<span class="badge badge-high">High</span>
+        {% elif r.urgency_level == 'Medium' %}<span class="badge badge-medium">Medium</span>
+        {% elif r.urgency_level == 'Low' %}<span class="badge badge-low">Low</span>
+        {% else %}<span class="badge badge-review">{{ r.urgency_level }}</span>{% endif %}
+      </td>
+      <td>{{ r.patient_name }}</td>
+      <td><span class="bg-pill">{{ r.blood_group }}</span></td>
+      <td>{{ r.hospital }}</td>
+      <td><span class="badge-status {{ r.status }}">{{ r.status }}</span></td>
+      <td style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+        <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline">View</a>
+        {% if r.status not in ['Fulfilled', 'Cancelled'] %}
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Approved">
+          <button type="submit" class="btn btn-sm btn-outline">Verify</button>
+        </form>
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Fulfilled">
+          <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Mark as fulfilled?')">Fulfill</button>
+        </form>
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Cancelled">
+          <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Cancel this request?')">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="empty-state">No requests submitted yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3 class="section-title" style="font-size:1.2rem; margin-top:2.5rem;">Registered Users</h3>
+<table class="request-table">
+  <thead>
+    <tr><th>Name</th><th>Role</th><th>Blood Group</th><th>Location</th><th>Availability</th><th>Screening</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.name }}<br><span style="font-size:0.82rem; color:var(--muted);">{{ u.email }}</span></td>
+      <td style="text-transform:capitalize;">{{ u.role }}</td>
+      <td><span class="bg-pill">{{ u.blood_group or "—" }}</span></td>
+      <td>{{ u.location or "—" }}</td>
+      <td>
+        {% if u.role == 'donor' %}
+          {% if u.is_available_donor %}<span class="badge badge-low">Available</span>{% else %}<span class="badge badge-critical">Unavailable</span>{% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% if u.last_donation_eligible is not none %}
+          {% if u.last_donation_eligible %}<span class="badge badge-low">Eligible</span>{% else %}<span class="badge badge-critical">Not Eligible</span>{% endif %}
+        {% else %}Not screened{% endif %}
+      </td>
+      <td style="display:flex; gap:0.3rem;">
+        {% if u.role == 'donor' %}
+        <a href="{{ url_for('toggle_donor_availability', user_id=u.id) }}" class="btn btn-sm btn-outline">Toggle</a>
+        <a href="{{ url_for('admin_donor_donations', donor_id=u.id) }}" class="btn btn-sm btn-outline">Donations</a>
+        {% endif %}
+        <form method="POST" action="{{ url_for('delete_user', user_id=u.id) }}" style="display:inline;">
+          <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Deactivate this user?')">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var urgencyData = {{ urgency_dist | tojson }};
+  var bloodData = {{ blood_dist | tojson }};
+
+  var urgencyColors = {
+    "Critical": "#C81E3A", "High": "#E06A1F", "Medium": "#C79000",
+    "Low": "#23884A", "Review": "#7B61FF"
+  };
+
+  new Chart(document.getElementById("urgencyChart"), {
+    type: "doughnut",
+    data: {
+      labels: Object.keys(urgencyData),
+      datasets: [{
+        data: Object.values(urgencyData),
+        backgroundColor: Object.keys(urgencyData).map(function(k) { return urgencyColors[k] || "#999"; }),
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+  });
+
+  new Chart(document.getElementById("bloodChart"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(bloodData),
+      datasets: [{
+        label: "Requests",
+        data: Object.values(bloodData),
+        backgroundColor: "#16233F",
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
+});
+</script>
+{% endblock %}
+{% endblock %}

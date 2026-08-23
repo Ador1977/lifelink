@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}New Blood Request — LifeLink{% endblock %}
+{% block content %}
+<div class="form-card wide">
+  <h2 class="form-title">Submit a blood request</h2>
+  <p class="form-sub">The AI urgency model will score this the moment you submit it.</p>
+  {% if not vlm_available %}
+  <div style="background:#fff4e5; border:1px solid #f0c36d; color:#7a4d00; padding:1rem; border-radius:8px; margin-bottom:1.25rem; font-size:0.9rem;">
+    <strong>Image scanning isn't set up on this server</strong> (the ollama/Pillow packages aren't installed).
+    Please install them and restart.
+  </div>
+  {% endif %}
+  <form method="POST" enctype="multipart/form-data">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Patient Name *</label>
+        <input type="text" name="patient_name" required>
+      </div>
+      <div class="form-group">
+        <label>Blood Group Needed *</label>
+        <select name="blood_group" required>
+          {% for bg in blood_groups %}<option value="{{ bg }}">{{ bg }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Units Needed *</label>
+        <input type="number" name="units_needed" min="1" max="20" required>
+      </div>
+      <div class="form-group">
+        <label>Hospital / Location *</label>
+        {% if hospitals %}
+        <select name="hospital" id="hospitalSelect" required>
+          <option value="">-- Select a hospital --</option>
+          {% for h in hospitals %}
+          <option value="{{ h.name }}">{{ h.name }} ({{ h.location }}){% if h.has_blood_bank %} [Blood Bank]{% endif %}</option>
+          {% endfor %}
+          <option value="__other__">Other (type manually)</option>
+        </select>
+        <input type="text" name="hospital_other" id="hospitalOther" placeholder="Enter hospital name"
+               style="display:none; margin-top:0.5rem;">
+        {% else %}
+        <input type="text" name="hospital" required placeholder="Hospital name">
+        {% endif %}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;">
+        <label>Patient Lab Report (for condition severity) *</label>
+        <input type="file" name="report_image" id="reportImage" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required
+               onchange="previewReport()">
+        <div id="reportPreview" style="margin-top:0.6rem;"></div>
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label>Needed Within *</label>
+        <select name="hours_needed" required>
+          <option value="1">1 hour</option>
+          <option value="2">2 hours</option>
+          <option value="4">4 hours</option>
+          <option value="6">6 hours</option>
+          <option value="12">12 hours</option>
+          <option value="24">24 hours</option>
+          <option value="48">48 hours</option>
+          <option value="72">3 days</option>
+          <option value="120">5 days</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Patient Age Group Risk *<span class="hint">(auto-filled from report)</span></label>
+        <select name="age_risk" required>
+          <option value="1">Adult (18-50), no added risk</option>
+          <option value="2">Elderly (50+) or child (5-17)</option>
+          <option value="3">Infant (&lt; 5) or elderly (65+) - high risk</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Hospital Type</label>
+        <select name="hospital_type">
+          <option value="0">Government Hospital</option>
+          <option value="1">Private Hospital</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Urgency Level<span class="hint">(auto from AI by default)</span></label>
+        <select name="urgency_override">
+          <option value="Auto">Auto (AI decides)</option>
+          <option value="Critical">Critical</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Additional Notes</label>
+      <textarea name="notes" placeholder="Any extra context for donors or admins..."></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Submit Request &amp; Run AI Assessment</button>
+  </form>
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var sel = document.getElementById("hospitalSelect");
+  var other = document.getElementById("hospitalOther");
+  if (sel && other) {
+    sel.addEventListener("change", function() {
+      if (sel.value === "__other__") {
+        other.style.display = "block";
+        other.required = true;
+        sel.removeAttribute("name");
+      } else {
+        other.style.display = "none";
+        other.required = false;
+        sel.setAttribute("name", "hospital");
+      }
+    });
+  }
+
+  window.previewReport = function() {
+    var file = document.getElementById("reportImage");
+    var preview = document.getElementById("reportPreview");
+    if (file && file.files && file.files[0]) {
+      var url = URL.createObjectURL(file.files[0]);
+      preview.innerHTML = '<img src="' + url + '" style="max-width:280px; max-height:220px; border:1px solid var(--line); border-radius:6px;">';
+    } else {
+      preview.innerHTML = "";
+    }
+  };
+});
+</script>
+{% endblock %}
+{% endblock %}

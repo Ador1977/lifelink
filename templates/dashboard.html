@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — LifeLink{% endblock %}
+{% block content %}
+<h2>Welcome, {{ current_user.name }}</h2>
+<p style="color: var(--muted); margin-bottom: 1.5rem;">
+  {{ current_user.role|capitalize }} account &middot; Blood group
+  <span class="bg-pill">{{ current_user.blood_group or "N/A" }}</span>
+  &middot; {{ current_user.gender or "N/A" }}
+  {% if current_user.last_donation_eligible is not none %}
+    &middot; Last screening:
+    {% if current_user.last_donation_eligible %}
+      <span class="badge badge-low">Eligible</span>
+    {% else %}
+      <span class="badge badge-critical">Not Eligible</span>
+    {% endif %}
+  {% endif %}
+</p>
+
+<div class="card-grid">
+  <div class="panel-card">
+    <h3>My Blood Requests <a href="{{ url_for('create_request') }}" class="btn btn-sm btn-outline">+ New</a></h3>
+    <ul class="list-plain">
+      {% for r in my_requests %}
+      <li>
+        <span>{{ r.patient_name }} &middot; <span class="bg-pill">{{ r.blood_group }}</span> &middot; {{ r.hospital }}</span>
+        <span>
+          {% if r.urgency_level == 'Critical' %}<span class="badge badge-critical pulse">{{ r.urgency_level }}</span>
+          {% elif r.urgency_level == 'High' %}<span class="badge badge-high">{{ r.urgency_level }}</span>
+          {% elif r.urgency_level == 'Medium' %}<span class="badge badge-medium">{{ r.urgency_level }}</span>
+          {% elif r.urgency_level == 'Low' %}<span class="badge badge-low">{{ r.urgency_level }}</span>
+          {% else %}<span class="badge badge-review">{{ r.urgency_level }}</span>{% endif %}
+          <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline" style="margin-left:0.3rem;">View</a>
+        </span>
+      </li>
+      {% else %}
+      <li class="empty-state" style="display:block; width:100%;">You haven't submitted any blood requests yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="panel-card">
+    <h3>Requests Matching Your Blood Group</h3>
+    <ul class="list-plain">
+      {% for r in matching_requests %}
+      <li>
+        <span>{{ r.patient_name }} needs <span class="bg-pill">{{ r.blood_group }}</span> &middot; {{ r.hospital }}</span>
+        <span>
+          {% if r.urgency_level == 'Critical' %}<span class="badge badge-critical pulse">{{ r.urgency_level }}</span>
+          {% elif r.urgency_level == 'High' %}<span class="badge badge-high">{{ r.urgency_level }}</span>
+          {% elif r.urgency_level == 'Medium' %}<span class="badge badge-medium">{{ r.urgency_level }}</span>
+          {% elif r.urgency_level == 'Low' %}<span class="badge badge-low">{{ r.urgency_level }}</span>
+          {% else %}<span class="badge badge-review">{{ r.urgency_level }}</span>{% endif %}
+          <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline" style="margin-left:0.3rem;">View</a>
+        </span>
+      </li>
+      {% else %}
+      <li class="empty-state" style="display:block; width:100%;">No matching requests right now.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+<div style="margin-top:1.5rem; display:flex; gap:1rem; flex-wrap:wrap;">
+  <a href="{{ url_for('health_screening') }}" class="btn btn-outline">Donor Health Screening</a>
+  <a href="{{ url_for('requests_list') }}" class="btn btn-outline">View Full Triage Board</a>
+  <a href="{{ url_for('donor_search') }}" class="btn btn-outline">Find Donors</a>
+</div>
+{% endblock %}

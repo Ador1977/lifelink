@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+{% block title %}Admin Control Panel — LifeLink{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h2>Admin Control Panel</h2>
+    <p class="page-sub">Moderate blood requests, manage users and monitor platform-wide activity.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{{ url_for('admin_blood_groups') }}" class="btn btn-outline">Review Blood Groups ({{ stats.bg_review_count }})</a>
+    <a href="{{ url_for('admin_import_donors_page') }}" class="btn btn-outline">Import Donors</a>
+    <a href="{{ url_for('admin_donations') }}" class="btn btn-primary">Donation Ledger</a>
+  </div>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-cell tone-red"><div class="stat-num">{{ stats.total_users }}</div><div class="stat-label">Total Users</div></div>
+  <div class="stat-cell tone-green"><div class="stat-num">{{ stats.total_donors }}</div><div class="stat-label">Total Donors</div></div>
+  <div class="stat-cell tone-blue"><div class="stat-num">{{ stats.total_patients }}</div><div class="stat-label">Total Patients</div></div>
+  <div class="stat-cell tone-gray"><div class="stat-num">{{ stats.total_requests }}</div><div class="stat-label">Total Requests</div></div>
+</div>
+<div class="stats-grid" style="margin-top:1rem;">
+  <div class="stat-cell tone-amber"><div class="stat-num">{{ stats.pending }}</div><div class="stat-label">Pending Requests</div></div>
+  <div class="stat-cell tone-green"><div class="stat-num">{{ stats.approved }}</div><div class="stat-label">Approved Requests</div></div>
+  <div class="stat-cell tone-red"><div class="stat-num">{{ stats.critical }}</div><div class="stat-label">Urgent Requests</div></div>
+  <div class="stat-cell tone-green"><div class="stat-num">{{ stats.fulfilled }}</div><div class="stat-label">Completed Donations</div></div>
+</div>
+<div class="stats-grid" style="margin-top:1rem;">
+  <div class="stat-cell tone-blue"><div class="stat-num">{{ stats.matched }}</div><div class="stat-label">Matched</div></div>
+  <div class="stat-cell tone-gray"><div class="stat-num">{{ stats.rejected }}</div><div class="stat-label">Rejected</div></div>
+  <div class="stat-cell tone-gray"><div class="stat-num">{{ stats.total_donations }}</div><div class="stat-label">Donation Records</div></div>
+  <div class="stat-cell tone-red"><div class="stat-num">{{ stats.total_bags }}</div><div class="stat-label">Bags Donated</div></div>
+</div>
+<div class="stats-grid" style="margin-top:1rem;">
+  <div class="stat-cell tone-gray"><div class="stat-num">{{ stats.restricted_users }}</div><div class="stat-label">Restricted Users</div></div>
+  <div class="stat-cell tone-red"><div class="stat-num">{{ reported_requests|length }}</div><div class="stat-label"><a href="{{ url_for('admin_dashboard', reported=1) }}" style="color:inherit;">Reported Requests</a></div></div>
+  <div class="stat-cell tone-amber"><div class="stat-num">{{ stats.status_counts["Under Review"] }}</div><div class="stat-label">Under Review</div></div>
+  <div class="stat-cell tone-blue"><div class="stat-num">{{ stats.bg_review_count }}</div><div class="stat-label">Blood Group Review</div></div>
+</div>
+
+<div class="card-grid" style="margin-top:1.5rem;">
+  <div class="panel-card">
+    <h3>Donation Eligibility Settings</h3>
+    <p style="font-size:0.9rem; color:var(--muted); margin:0.3rem 0 0.8rem;">
+      Minimum waiting period after a donation before a donor can give again.
+    </p>
+    <form method="POST" action="{{ url_for('admin_update_settings') }}">
+      <div class="form-row" style="max-width:340px;">
+        <div class="form-group">
+          <label>Waiting period — Male (days)</label>
+          <input type="number" name="donation_interval_male" value="{{ interval_male }}" min="1" max="730" required>
+        </div>
+        <div class="form-group">
+          <label>Waiting period — Female (days)</label>
+          <input type="number" name="donation_interval_female" value="{{ interval_female }}" min="1" max="730" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+    </form>
+  </div>
+  <div class="panel-card">
+    <h3>Urgency &amp; Demand</h3>
+    <canvas id="urgencyChart" height="180"></canvas>
+    <canvas id="bloodChart" height="180" style="margin-top:1rem;"></canvas>
+  </div>
+</div>
+
+<h3 class="section-title" style="font-size:1.2rem; margin-top:2.5rem;">Blood Request Moderation</h3>
+<form method="GET" action="{{ url_for('admin_dashboard') }}" class="panel-card" style="margin-bottom:1rem;">
+  <div class="form-row">
+    <div class="form-group">
+      <label>Search</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Patient, hospital, email...">
+    </div>
+    <div class="form-group">
+      <label>Status</label>
+      <select name="status">
+        <option value="">All statuses</option>
+        {% for s in status_names %}
+        <option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ s }} ({{ stats.status_counts[s] }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Blood Group</label>
+      <select name="blood_group">
+        <option value="">All groups</option>
+        {% for bg in ['A+','A-','B+','B-','AB+','AB-','O+','O-'] %}
+        <option value="{{ bg }}" {{ 'selected' if blood_filter == bg }}>{{ bg }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="align-self:end;">
+      <button type="submit" class="btn btn-outline">Filter</button>
+      <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Clear</a>
+    </div>
+  </div>
+</form>
+
+<table class="request-table">
+  <thead>
+    <tr><th>Urgency</th><th>Patient</th><th>Group</th><th>Hospital</th><th>Status</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+    {% for r in requests %}
+    <tr>
+      <td>
+        {% if r.urgency_level == 'Critical' %}<span class="badge badge-critical pulse">Critical</span>
+        {% elif r.urgency_level == 'High' %}<span class="badge badge-high">High</span>
+        {% elif r.urgency_level == 'Medium' %}<span class="badge badge-medium">Medium</span>
+        {% elif r.urgency_level == 'Low' %}<span class="badge badge-low">Low</span>
+        {% else %}<span class="badge badge-review">{{ r.urgency_level }}</span>{% endif %}
+      </td>
+      <td>
+        {{ r.patient_name }}
+        <div style="font-size:0.92rem; color:var(--muted);">{{ r.requester.email }}</div>
+        {% if r.rejection_reason %}<div style="font-size:0.9rem; color:var(--critical);">Rejected: {{ r.rejection_reason }}</div>{% endif %}
+      </td>
+      <td><span class="bg-pill">{{ r.blood_group }}</span></td>
+      <td>{{ r.hospital }}</td>
+      <td><span class="badge-status {{ r.status|replace(' ', '-') }}">{{ r.status }}</span></td>
+      <td style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+        <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline">View</a>
+        {% if r.status in ['Pending', 'Under Review'] %}
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Under Review">
+          <button type="submit" class="btn btn-sm btn-outline">Review</button>
+        </form>
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Approved">
+          <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Approve this request and notify matching donors?')">Approve</button>
+        </form>
+        {% endif %}
+        {% if r.status in ['Pending', 'Under Review', 'Approved', 'Matched'] %}
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Rejected">
+          <input type="text" name="rejection_reason" placeholder="Reason" required style="width:130px; padding:0.3rem; font-size:0.88rem;">
+          <button type="submit" class="btn btn-sm btn-outline">Reject</button>
+        </form>
+        {% endif %}
+        {% if r.status not in ['Fulfilled', 'Cancelled', 'Rejected'] %}
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Fulfilled">
+          <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Mark as fulfilled? Donor history will be updated.')">Fulfill</button>
+        </form>
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Cancelled">
+          <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Cancel this request?')">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="empty-state">No requests match the current filters.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3 class="section-title" style="font-size:1.2rem; margin-top:2.5rem;">
+  Reported / Inappropriate Requests
+  {% if not reported_filter %}<a href="{{ url_for('admin_dashboard', reported=1) }}" class="btn btn-sm btn-outline">Show only reported</a>{% endif %}
+</h3>
+{% if reported_requests %}
+<table class="request-table">
+  <thead>
+    <tr><th>Request</th><th>Patient</th><th>Group</th><th>Reports</th><th>Status</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+    {% for r in reported_requests %}
+    <tr>
+      <td><a href="{{ url_for('request_detail', req_id=r.id) }}">#{{ r.id }}</a></td>
+      <td>{{ r.patient_name }}</td>
+      <td><span class="bg-pill">{{ r.blood_group }}</span></td>
+      <td>
+        <ul style="margin:0; padding-left:1rem; font-size:0.88rem;">
+          {% for rep in r.reports %}
+          <li>{{ rep.reason or 'No reason given' }} <span style="color:var(--muted);">— {{ rep.reporter.name }}</span></li>
+          {% endfor %}
+        </ul>
+      </td>
+      <td><span class="badge-status {{ r.status|replace(' ', '-') }}">{{ r.status }}</span></td>
+      <td style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+        {% if r.status in ['Pending', 'Under Review', 'Approved', 'Matched'] %}
+        <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Rejected">
+          <input type="hidden" name="rejection_reason" value="Reported as fake/inappropriate">
+          <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Reject this request as fake/inappropriate? The requester will be notified.')">Reject as fake</button>
+        </form>
+        {% endif %}
+        <form method="POST" action="{{ url_for('admin_clear_reports', req_id=r.id) }}" style="display:inline;">
+          <button type="submit" class="btn btn-sm btn-outline">Clear reports</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="panel-card" style="text-align:center; padding:1.5rem;">
+  <p style="color:var(--muted); margin:0;">No reported requests.</p>
+</div>
+{% endif %}
+
+<h3 class="section-title" style="font-size:1.2rem; margin-top:2.5rem;">Registered Users</h3>
+<form method="GET" action="{{ url_for('admin_dashboard') }}" class="panel-card" style="margin-bottom:1rem;">
+  <div class="form-row">
+    <div class="form-group">
+      <label>Search</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Name or email...">
+    </div>
+    <div class="form-group">
+      <label>Role</label>
+      <select name="role">
+        <option value="">All roles</option>
+        {% for rl in ['admin','donor','patient'] %}
+        <option value="{{ rl }}" {{ 'selected' if role_filter == rl }}>{{ rl|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="align-self:end;">
+      <button type="submit" class="btn btn-outline">Filter</button>
+      <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Clear</a>
+    </div>
+  </div>
+</form>
+
+<table class="request-table">
+  <thead>
+    <tr><th>Name</th><th>Role</th><th>Blood Group</th><th>Location</th><th>Availability</th><th>Screening</th><th>Account</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.name }}<br><span style="font-size:0.92rem; color:var(--muted);">{{ u.email }}</span></td>
+      <td style="text-transform:capitalize;">{{ u.role }}</td>
+      <td><span class="bg-pill">{{ u.blood_group or "—" }}</span></td>
+      <td>{{ u.location or "—" }}</td>
+      <td>
+        {% if u.role == 'donor' %}
+          {% if u.is_available_donor %}<span class="badge badge-low">Available</span>{% else %}<span class="badge badge-critical">Unavailable</span>{% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% set us = user_status.get(u.id) %}
+        {% if u.role == 'donor' %}
+          {% if us and us.eligible %}
+            <span class="badge badge-low">Eligible</span>
+            {% if us.next_eligible_date %}<div style="font-size:0.92rem; color:var(--muted);">Next: {{ us.next_eligible_date.strftime('%d %b %Y') }}</div>{% endif %}
+          {% elif us %}
+            <span class="badge badge-critical">Not Eligible</span>
+            <div style="font-size:0.92rem; color:var(--muted);">{{ us.detail }}</div>
+          {% else %}Not screened{% endif %}
+        {% elif u.role == 'patient' %}
+          {% if us and us.latest_urgency %}
+            <span class="badge badge-review" style="font-size:0.9rem;">{{ us.latest_urgency }}</span>
+            <div style="font-size:0.92rem; color:var(--muted);">{{ us.request_count }} request(s) &middot; {{ us.latest_status }}</div>
+          {% else %}
+            <div style="font-size:0.9rem; color:var(--muted);">No requests yet</div>
+          {% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% if u.is_restricted %}<span class="badge badge-critical">Restricted</span>
+        {% elif u.is_deleted %}<span class="badge badge-review">Deactivated</span>
+        {% else %}<span class="badge badge-low">Active</span>{% endif %}
+      </td>
+      <td style="display:flex; gap:0.3rem; flex-wrap:wrap;">
+        <a href="{{ url_for('admin_dashboard', q=u.email) }}" class="btn btn-sm btn-outline">Requests</a>
+        {% if u.role == 'donor' %}
+        <a href="{{ url_for('toggle_donor_availability', user_id=u.id) }}" class="btn btn-sm btn-outline">Toggle</a>
+        <a href="{{ url_for('admin_donor_donations', donor_id=u.id) }}" class="btn btn-sm btn-outline">Donations</a>
+        {% endif %}
+        {% if u.id != current_user.id %}
+          {% if u.is_restricted or u.is_deleted %}
+          <form method="POST" action="{{ url_for('restore_user', user_id=u.id) }}" style="display:inline;">
+            <button type="submit" class="btn btn-sm btn-outline">Restore</button>
+          </form>
+          {% else %}
+          <form method="POST" action="{{ url_for('restrict_user', user_id=u.id) }}" style="display:inline;">
+            <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Restrict this account (cannot log in)?')">Restrict</button>
+          </form>
+          <form method="POST" action="{{ url_for('delete_user', user_id=u.id) }}" style="display:inline;">
+            <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Deactivate this user?')">Deactivate</button>
+          </form>
+          {% endif %}
+        {% else %}
+          <span style="font-size:0.9rem; color:var(--muted);">(you)</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="card-grid" style="margin-top:2rem;">
+  <div class="panel-card">
+    <h3>Recent Request Activity (Audit)</h3>
+    {% if audit_entries %}
+    <ul class="list-plain" style="font-size:0.9rem;">
+      {% for e in audit_entries %}
+      <li>
+        <span>
+          <a href="{{ url_for('request_detail', req_id=e.request_id) }}">#{{ e.request_id }}</a>
+          {{ e.patient }} ({{ e.blood_group }}):
+          {% if e.old_status %}{{ e.old_status }} → {% endif %}<strong>{{ e.new_status }}</strong>
+          {% if e.note %}<span style="color:var(--muted);">— {{ e.note }}</span>{% endif %}
+        </span>
+        <span style="font-size:0.9rem; color:var(--muted);">{{ e.changed_by }} &middot; {{ e.created_at.strftime('%d %b, %H:%M') if e.created_at }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No status changes yet.</p>
+    {% endif %}
+  </div>
+  <div class="panel-card">
+    <h3>Recent Sign-ins / Admin Actions</h3>
+    {% if auth_logs %}
+    <ul class="list-plain" style="font-size:0.9rem;">
+      {% for a in auth_logs %}
+      <li>
+        <span><strong>{{ a.event }}</strong> {% if a.detail %}<span style="color:var(--muted);">— {{ a.detail }}</span>{% endif %}</span>
+        <span style="font-size:0.9rem; color:var(--muted);">{{ a.created_at.strftime('%d %b, %H:%M') if a.created_at }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No events recorded yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var urgencyData = {{ urgency_dist | tojson }};
+  var bloodData = {{ blood_dist | tojson }};
+  var urgencyColors = {
+    "Critical": "#C62828", "High": "#EF5350", "Medium": "#F9A825",
+    "Low": "#2E7D32", "Review": "#1976D2"
+  };
+  new Chart(document.getElementById("urgencyChart"), {
+    type: "doughnut",
+    data: {
+      labels: Object.keys(urgencyData),
+      datasets: [{
+        data: Object.values(urgencyData),
+        backgroundColor: Object.keys(urgencyData).map(function(k) { return urgencyColors[k] || "#999"; }),
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+  });
+  new Chart(document.getElementById("bloodChart"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(bloodData),
+      datasets: [{
+        label: "Requests",
+        data: Object.values(bloodData),
+        backgroundColor: "#C62828",
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
+});
+</script>
+{% endblock %}
+{% endblock %}

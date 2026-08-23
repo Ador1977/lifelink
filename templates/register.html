@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Sign Up — LifeLink{% endblock %}
+{% block content %}
+<div class="form-card wide">
+  <h2 class="form-title">Create your account</h2>
+  <p class="form-sub">Join as a donor, patient, or hospital representative.</p>
+  <form method="POST">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" name="name" required>
+      </div>
+      <div class="form-group">
+        <label>Email *</label>
+        <input type="email" name="email" required>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Password *</label>
+        <input type="password" name="password" required minlength="8">
+        <span class="hint">Min 8 chars, uppercase, lowercase, digit, special char</span>
+      </div>
+      <div class="form-group">
+        <label>Account Type *</label>
+        <select name="role" required>
+          <option value="donor">Donor</option>
+          <option value="patient">Patient / Requester</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Blood Group *</label>
+        <select name="blood_group" required>
+          {% for bg in blood_groups %}
+          <option value="{{ bg }}">{{ bg }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Gender *</label>
+        <select name="gender" required>
+          <option value="M">Male</option>
+          <option value="F">Female</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Age</label>
+        <input type="number" name="age" min="1" max="120">
+      </div>
+      <div class="form-group">
+        <label>Phone Number *</label>
+        <input type="text" name="phone" placeholder="01712345678" required
+               pattern="^\d{11}$" maxlength="11"
+               title="Phone number must be exactly 11 digits">
+        <span class="hint">Must be exactly 11 digits</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Location</label>
+      <input type="text" name="location" placeholder="City / Area">
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+  </form>
+  <div class="form-footer">Already have an account? <a href="{{ url_for('login') }}" style="color: var(--critical); font-weight: 600;">Log in</a></div>
+</div>
+{% endblock %}

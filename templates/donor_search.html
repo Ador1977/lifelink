@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Find Donors — LifeLink{% endblock %}
+{% block content %}
+<h2>Find Donors</h2>
+<p style="color: var(--muted); margin-bottom: 1.5rem;">Search for available donors by blood group and location.</p>
+
+<div class="panel-card" style="margin-bottom:1.5rem;">
+  <form method="GET">
+    <div class="form-row" style="max-width:600px;">
+      <div class="form-group">
+        <label>Blood Group Needed</label>
+        <select name="blood_group">
+          <option value="">Any blood group</option>
+          {% for bg in blood_groups %}
+          <option value="{{ bg }}" {% if query_bg == bg %}selected{% endif %}>{{ bg }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Location</label>
+        <input type="text" name="location" value="{{ query_location or '' }}" placeholder="City / Area">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+</div>
+
+{% if map_markers %}
+<div class="panel-card" style="margin-bottom:1rem;">
+  <h3 style="margin:0 0 0.6rem;">Map of Matching Donors ({{ map_markers|length }})</h3>
+  <div id="donorMap" style="height:360px; border-radius:8px; background:#eee; border:1px solid var(--line);"></div>
+  {% if not google_maps_key %}
+  <p class="hint" style="margin-top:0.5rem;">
+    Static map preview. Add a <code>GOOGLE_MAPS_API_KEY</code> to your <code>.env</code>
+    to enable the interactive map with a marker and match score for every donor.
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if query_bg or query_location %}
+  {% if ranked %}
+  <div class="panel-card" style="margin-bottom:1rem; border-color:var(--review); background:var(--review-bg);">
+    <h3 style="color:var(--review); margin:0;">AI-Ranked Donors</h3>
+    <p style="font-size:0.85rem; color:var(--muted); margin:0.4rem 0 0;">
+      Sorted by the recommendation model using compatibility, proximity to
+      <strong>{{ current_user.location or 'your location' }}</strong>, eligibility, reliability and experience.
+    </p>
+  </div>
+  <table class="request-table">
+    <thead>
+      <tr><th>Rank</th><th>Name</th><th>Blood Group</th><th>Location</th><th>Distance</th><th>Match Score</th><th>Eligibility</th><th>Contact</th></tr>
+    </thead>
+    <tbody>
+      {% for r in ranked %}
+      <tr>
+        <td><span class="rank-badge">{{ loop.index }}</span></td>
+        <td>{{ r.donor.name }}<br><span style="font-size:0.82rem; color:var(--muted);">{{ r.donor.email }}</span></td>
+        <td>
+          <span class="bg-pill">{{ r.donor.blood_group }}</span>
+          {% if r.exact_match %}<span class="badge badge-low" style="margin-left:0.3rem;">exact</span>{% endif %}
+        </td>
+        <td>{{ r.donor.location or "—" }}</td>
+        <td>{{ r.distance_label }}</td>
+        <td>
+          <span class="mono">{{ r.score }}</span>
+          <div class="score-bar"><span style="width: {{ r.score }}%;"></span></div>
+        </td>
+        <td>
+          {% if r.eligibility_status.eligible %}
+            <span class="badge badge-low">&#10004; Eligible</span>
+            {% if r.next_eligible_date %}
+            <br><span style="font-size:0.82rem; color:var(--muted);">Next: {{ r.next_eligible_date.strftime('%d %b %Y') }}</span>
+            {% endif %}
+          {% else %}
+            <span class="badge badge-critical">&#10060; Not Eligible</span>
+            <br><span style="font-size:0.82rem; color:var(--critical); font-style:italic;">{{ r.eligibility_status.reason }}</span>
+          {% endif %}
+        </td>
+        <td>{{ r.donor.preferred_contact_method or "Phone" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% elif results %}
+  <table class="request-table">
+    <thead>
+      <tr><th>Name</th><th>Blood Group</th><th>Location</th><th>Phone</th><th>Age</th><th>Eligibility</th></tr>
+    </thead>
+    <tbody>
+      {% for v in result_views %}
+      <tr>
+        <td>{{ v.donor.name }}<br><span style="font-size:0.82rem; color:var(--muted);">{{ v.donor.email }}</span></td>
+        <td><span class="bg-pill">{{ v.donor.blood_group }}</span></td>
+        <td>{{ v.donor.location or "—" }}</td>
+        <td>{{ v.donor.phone or "—" }}</td>
+        <td>{{ v.donor.age or "—" }}</td>
+        <td>
+          {% if v.status.eligible %}
+            <span class="badge badge-low">&#10004; Eligible</span>
+          {% else %}
+            <span class="badge badge-critical">&#10060; Not Eligible</span>
+            <br><span style="font-size:0.82rem; color:var(--critical); font-style:italic;">{{ v.status.reason }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="panel-card" style="text-align:center; padding:2rem;">
+    <p style="color:var(--muted);">No matching donors found. Try different search criteria.</p>
+  </div>
+  {% endif %}
+{% endif %}
+
+{% block scripts %}
+{% if map_markers %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var markers = {{ map_markers | tojson }};
+  var center = {{ map_center | tojson if map_center else 'null' }};
+  var mapEl = document.getElementById("donorMap");
+  if (!mapEl || !markers.length) return;
+
+  function initInteractiveMap() {
+    if (typeof google === "undefined" || !google.maps) return;
+    var c = center
+      ? new google.maps.LatLng(center.lat, center.lng)
+      : new google.maps.LatLng(markers[0].lat, markers[0].lng);
+    var map = new google.maps.Map(mapEl, { zoom: 11, center: c });
+
+    markers.forEach(function (m) {
+      var pin = new google.maps.Marker({
+        position: { lat: m.lat, lng: m.lng },
+        map: map,
+        title: m.name
+      });
+      var content = "<strong>" + m.name + "</strong>" +
+        (m.blood_group ? "<br><b>" + m.blood_group + "</b>" : "") +
+        (m.location ? "<br>" + m.location : "") +
+        (m.distance_label ? "<br>" + m.distance_label : "") +
+        (m.score != null ? "<br>Match score: " + m.score : "");
+      var info = new google.maps.InfoWindow({ content: content });
+      pin.addListener("click", function () { info.open(map, pin); });
+    });
+
+    if (markers.length > 1) {
+      var bounds = new google.maps.LatLngBounds();
+      markers.forEach(function (m) { bounds.extend(new google.maps.LatLng(m.lat, m.lng)); });
+      map.fitBounds(bounds);
+    }
+  }
+
+  var key = {{ google_maps_key | tojson }};
+  if (key) {
+    var script = document.createElement("script");
+    script.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key);
+    script.async = true;
+    script.defer = true;
+    script.onload = initInteractiveMap;
+    document.head.appendChild(script);
+  } else {
+    var q = center ? center.lat + "," + center.lng : markers[0].lat + "," + markers[0].lng;
+    mapEl.innerHTML = '<iframe src="https://www.google.com/maps?q=' + q +
+      '&output=embed&z=12" width="100%" height="100%" style="border:0; border-radius:8px;" ' +
+      'allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>';
+  }
+});
+</script>
+{% endif %}
+{% endblock %}
+{% endblock %}

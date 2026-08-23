@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Notifications — LifeLink{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h2>Notifications</h2>
+  {% if notifications %}
+  <form method="POST" action="{{ url_for('mark_notifications_read') }}">
+    <button type="submit" class="btn btn-sm btn-outline">Mark All Read</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if notifications %}
+<ul class="list-plain">
+  {% for n in notifications %}
+  <li style="flex-direction:column; align-items:stretch; padding:0.9rem 1rem; border-radius:10px; margin-bottom:0.5rem; {% if not n.is_read %}background:var(--primary-light); border:1px solid rgba(198,40,40,0.25);{% else %}background:var(--panel); border:1px solid var(--line);{% endif %}">
+    <span style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+      {% if not n.is_read %}<span style="width:8px; height:8px; background:var(--critical); border-radius:50%; display:inline-block;"></span>{% endif %}
+      {% if n.title %}
+        <strong>{{ n.title }}</strong>
+        {% if n.notification_type %}
+          {% set type_classes = {
+            'request_approved': 'type-success', 'request_fulfilled': 'type-success',
+            'donation_recorded': 'type-success', 'donor_offer_accepted': 'type-success',
+            'eligible_again': 'type-success',
+            'request_created': 'type-info', 'request_review': 'type-info',
+            'donor_offer': 'type-pending',
+            'request_rejected': 'type-danger', 'request_reported': 'type-danger',
+            'request_cancelled': 'type-system'
+          } %}
+          {% set type_class = type_classes.get(n.notification_type, 'type-system') %}
+          <span class="badge {{ type_class }}" style="font-size:0.85rem;">{{ n.notification_type|replace('_', ' ') }}</span>
+        {% endif %}
+        {% if n.request_id %}<span class="bg-pill" style="font-size:0.85rem;">Req #{{ n.request_id }}</span>{% endif %}
+      {% endif %}
+    </span>
+    <span style="margin:0.3rem 0 0.2rem;">
+      {% if n.link %}
+        <a href="{{ url_for('mark_single_read', notif_id=n.id) }}" style="color:inherit; text-decoration:none;">
+          {{ n.message }}
+        </a>
+      {% else %}
+        {{ n.message }}
+      {% endif %}
+    </span>
+    <span style="font-size:0.85rem; color:var(--muted);">
+      {{ n.created_at.strftime('%d %b, %H:%M') if n.created_at }}
+      {% if n.link %} &middot; <a href="{{ url_for('mark_single_read', notif_id=n.id) }}" style="color:inherit;">open</a>{% endif %}
+    </span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="panel-card" style="text-align:center; padding:3rem;">
+  <p style="color:var(--muted);">No notifications yet.</p>
+</div>
+{% endif %}
+{% endblock %}

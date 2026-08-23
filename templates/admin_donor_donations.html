@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Donations — {{ donor.name }} — LifeLink{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem;">
+  <a href="{{ url_for('admin_dashboard') }}" class="btn btn-sm btn-outline">&larr; Admin Panel</a>
+  <h2 style="margin:0;">Donation History — {{ donor.name }}</h2>
+</div>
+
+<div class="panel-card">
+  <h3>Donor Profile &amp; Eligibility</h3>
+  <table style="width:100%; font-size:0.9rem;">
+    <tr><td style="color:var(--muted); padding:0.35rem 0;">Blood Group</td><td><span class="bg-pill">{{ donor.blood_group or '—' }}</span></td></tr>
+    <tr><td style="color:var(--muted); padding:0.35rem 0;">Location</td><td>{{ donor.location or '—' }}</td></tr>
+    <tr><td style="color:var(--muted); padding:0.35rem 0;">Total Donations</td><td>{{ view.total_donations }}</td></tr>
+    <tr><td style="color:var(--muted); padding:0.35rem 0;">Total Bags Donated</td><td>{{ view.total_bags }}</td></tr>
+    <tr><td style="color:var(--muted); padding:0.35rem 0;">Last Donation Date</td><td>{{ view.status.last_donation_date.strftime('%d %b %Y') if view.status.last_donation_date else '—' }}</td></tr>
+    <tr><td style="color:var(--muted); padding:0.35rem 0;">Next Eligible Date</td><td>{{ view.status.next_eligible_date.strftime('%d %b %Y') if view.status.next_eligible_date else '—' }}</td></tr>
+    <tr><td style="color:var(--muted); padding:0.35rem 0;">Waiting Period</td><td>{{ interval_male }} days (male) / {{ interval_female }} days (female)</td></tr>
+    <tr><td style="color:var(--muted); padding:0.35rem 0;">Current Status</td><td>
+      {% if view.status.eligible %}
+        <span class="badge badge-low">&#10004; Eligible to Donate</span>
+        <span style="color:var(--muted); font-size:0.85rem;"> — {{ view.status.reason }}</span>
+      {% else %}
+        <span class="badge badge-critical">&#10060; Not Eligible</span>
+        <span style="color:var(--critical); font-size:0.85rem; font-style:italic;"> — {{ view.status.reason }}</span>
+      {% endif %}
+    </td></tr>
+  </table>
+</div>
+
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Record a Donation</h3>
+  <p style="font-size:0.85rem; color:var(--muted); margin:0.3rem 0 0.8rem;">
+    The next eligible date is computed automatically from the configured waiting
+    period and the donor's history is never overwritten.
+  </p>
+  <form method="POST" action="{{ url_for('admin_record_donation', donor_id=donor.id) }}">
+    <div class="form-row" style="max-width:760px;">
+      <div class="form-group">
+        <label>Donation Date</label>
+        <input type="date" name="donation_date">
+      </div>
+      <div class="form-group">
+        <label>Time (optional)</label>
+        <input type="time" name="donation_time">
+      </div>
+      <div class="form-group">
+        <label>Bags</label>
+        <input type="number" name="bags" value="1" min="1" max="20">
+      </div>
+      <div class="form-group" style="flex:2;">
+        <label>Donation Location / Hospital</label>
+        <input type="text" name="donation_location" value="{{ donor.location or '' }}" placeholder="Hospital or blood bank">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Record Donation</button>
+  </form>
+</div>
+
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Donation History ({{ donations|length }})</h3>
+  {% if donations %}
+  <table class="request-table" style="margin-top:0.8rem;">
+    <thead>
+      <tr><th>Date</th><th>Time</th><th>Blood Group</th><th>Bags</th><th>Location / Hospital</th><th>Next Eligible Date</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for d in donations %}
+      <tr>
+        <td>{{ d.donation_date.strftime('%d %B %Y') }}</td>
+        <td>{{ d.donation_time or '—' }}</td>
+        <td><span class="bg-pill">{{ d.blood_group }}</span></td>
+        <td>{{ d.bags }}</td>
+        <td>{{ d.donation_location or '—' }}</td>
+        <td>{{ d.next_eligible_date.strftime('%d %b %Y') if d.next_eligible_date else '—' }}</td>
+        <td><span class="badge badge-low" style="font-size:0.85rem;">{{ d.status }}</span></td>
+        <td>
+          <form method="POST" action="{{ url_for('admin_delete_donation', donation_id=d.id) }}" style="display:inline;">
+            <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Delete this donation record? Eligibility will be recalculated.')">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted); font-size:0.9rem;">No donations recorded for this donor yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

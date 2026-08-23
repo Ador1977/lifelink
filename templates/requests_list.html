@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Triage Board — LifeLink{% endblock %}
+{% block content %}
+<h2>Triage board</h2>
+<p style="color: var(--muted); margin-bottom: 1rem;">All active blood requests, sorted automatically by AI-assessed urgency.</p>
+
+<form method="GET" class="filter-bar">
+  <div class="form-row" style="max-width:600px;">
+    <div class="form-group">
+      <label>Blood Group</label>
+      <select name="blood_group">
+        <option value="">All Groups</option>
+        {% for bg in all_blood_groups %}
+        <option value="{{ bg }}" {% if bg_filter == bg %}selected{% endif %}>{{ bg }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Status</label>
+      <select name="status">
+        <option value="">All Statuses</option>
+        {% for s in ['Pending', 'Under Review', 'Approved', 'Rejected', 'Matched', 'Fulfilled', 'Cancelled'] %}
+        <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-sm btn-outline">Filter</button>
+  {% if bg_filter or status_filter %}
+    <a href="{{ url_for('requests_list') }}" class="btn btn-sm btn-outline">Clear</a>
+  {% endif %}
+</form>
+
+<table class="request-table">
+  <thead>
+    <tr>
+      <th>Urgency</th>
+      <th>Patient</th>
+      <th>Blood Group</th>
+      <th>Units</th>
+      <th>Hospital</th>
+      <th>Needed Within</th>
+      <th>Status</th>
+      <th>Compatible Donors</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in requests %}
+    <tr>
+      <td>
+        {% if r.urgency_level == 'Critical' %}<span class="badge badge-critical pulse">Critical</span>
+        {% elif r.urgency_level == 'High' %}<span class="badge badge-high">High</span>
+        {% elif r.urgency_level == 'Medium' %}<span class="badge badge-medium">Medium</span>
+        {% elif r.urgency_level == 'Low' %}<span class="badge badge-low">Low</span>
+        {% else %}<span class="badge badge-review">{{ r.urgency_level }}</span>{% endif %}
+        <div style="font-size:0.78rem; color:var(--muted); margin-top:2px;">{{ r.urgency_confidence }}% conf.</div>
+      </td>
+      <td>{{ r.patient_name }}</td>
+      <td><span class="bg-pill">{{ r.blood_group }}</span></td>
+      <td>{{ r.units_needed }}</td>
+      <td>{{ r.hospital }}</td>
+      <td>{{ r.hours_needed }} hrs</td>
+      <td><span class="badge-status {{ r.status|replace(' ', '-') }}">{{ r.status }}</span></td>
+      <td style="font-size:0.85rem; color:var(--muted);">{{ compat[r.blood_group]|join(", ") }}</td>
+      <td>
+        <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline">View</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="empty-state">No blood requests found. <a href="{{ url_for('create_request') }}" style="color:var(--critical);">Submit the first one</a>.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

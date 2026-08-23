@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Request #{{ req.id }} — LifeLink{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem;">
+  <a href="{{ url_for('requests_list') }}" class="btn btn-sm btn-outline">&larr; Back</a>
+  <h2 style="margin:0;">Blood Request #{{ req.id }}</h2>
+</div>
+
+<div class="card-grid">
+  <div class="panel-card">
+    <h3>Request Details</h3>
+    <table style="width:100%; font-size:0.9rem;">
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Patient</td><td style="padding:0.4rem 0;"><strong>{{ req.patient_name }}</strong></td></tr>
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Blood Group</td><td style="padding:0.4rem 0;"><span class="bg-pill">{{ req.blood_group }}</span></td></tr>
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Units Needed</td><td style="padding:0.4rem 0;">{{ req.units_needed }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Hospital</td><td style="padding:0.4rem 0;">{{ req.hospital }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Timeframe</td><td style="padding:0.4rem 0;">{{ req.hours_needed }} hours</td></tr>
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Condition Score</td><td style="padding:0.4rem 0;">{{ req.condition_score }}/5
+        {% if req.condition_source == 'report' %}<span class="badge badge-low" style="font-size:0.7rem;">from report</span>{% endif %}
+      </td></tr>
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Age Risk</td><td style="padding:0.4rem 0;">{{ req.age_risk }}/3</td></tr>
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Notes</td><td style="padding:0.4rem 0;">{{ req.notes or "None" }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.4rem 0;">Submitted</td><td style="padding:0.4rem 0;">{{ req.created_at.strftime('%d %b %Y, %H:%M') if req.created_at else 'N/A' }}</td></tr>
+    </table>
+
+    {% if current_user.role == 'admin' or req.requester_id == current_user.id %}
+      {% if req.status not in ['Fulfilled', 'Cancelled'] %}
+      <div style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+        {% if current_user.role == 'admin' %}
+          {% if req.status in ['Pending', 'Under Review'] %}
+          <form method="POST" action="{{ url_for('update_request_status', req_id=req.id) }}" style="display:inline;">
+            <input type="hidden" name="new_status" value="Under Review">
+            <button type="submit" class="btn btn-sm btn-outline">Review</button>
+          </form>
+          <form method="POST" action="{{ url_for('update_request_status', req_id=req.id) }}" style="display:inline;">
+            <input type="hidden" name="new_status" value="Approved">
+            <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Approve and notify matching donors?')">Approve</button>
+          </form>
+          {% endif %}
+          {% if req.status in ['Pending', 'Under Review', 'Approved', 'Matched'] %}
+          <form method="POST" action="{{ url_for('update_request_status', req_id=req.id) }}" style="display:inline;">
+            <input type="hidden" name="new_status" value="Rejected">
+            <input type="text" name="rejection_reason" placeholder="Reason" required style="width:150px; padding:0.3rem; font-size:0.8rem;">
+            <button type="submit" class="btn btn-sm btn-outline">Reject</button>
+          </form>
+          {% endif %}
+          {% if req.status not in ['Rejected'] %}
+          <form method="POST" action="{{ url_for('update_request_status', req_id=req.id) }}" style="display:inline;">
+            <input type="hidden" name="new_status" value="Fulfilled">
+            <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Mark as fulfilled?')">Mark Fulfilled</button>
+          </form>
+          <form method="POST" action="{{ url_for('update_request_status', req_id=req.id) }}" style="display:inline;">
+            <input type="hidden" name="new_status" value="Cancelled">
+            <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Cancel this request?')">Cancel</button>
+          </form>
+          {% endif %}
+        {% endif %}
+        {% if req.requester_id == current_user.id and req.status in ['Pending', 'Under Review', 'Approved', 'Matched'] %}
+        <form method="POST" action="{{ url_for('update_request_status', req_id=req.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Cancelled">
+          <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Cancel this request?')">Cancel</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="panel-card">
+    <h3>AI Assessment</h3>
+    <div style="margin-bottom:1rem;">
+      {% if req.urgency_level == 'Critical' %}<span class="badge badge-critical pulse" style="font-size:0.9rem;">{{ req.urgency_level }}</span>
+      {% elif req.urgency_level == 'High' %}<span class="badge badge-high" style="font-size:0.9rem;">{{ req.urgency_level }}</span>
+      {% elif req.urgency_level == 'Medium' %}<span class="badge badge-medium" style="font-size:0.9rem;">{{ req.urgency_level }}</span>
+      {% elif req.urgency_level == 'Low' %}<span class="badge badge-low" style="font-size:0.9rem;">{{ req.urgency_level }}</span>
+      {% else %}<span class="badge badge-review" style="font-size:0.9rem;">{{ req.urgency_level }}</span>{% endif %}
+      <span style="font-family:var(--font-mono); font-size:0.85rem; margin-left:0.5rem;">{{ req.urgency_confidence }}% confidence</span>
+    </div>
+
+    <h4 style="margin-bottom:0.5rem;">Status</h4>
+    <span class="badge-status {{ req.status|replace(' ', '-') }}" style="font-size:0.85rem;">{{ req.status }}</span>
+    {% if req.rejection_reason %}
+    <p style="color:var(--critical); font-size:0.85rem; margin:0.5rem 0 0;">Rejected — {{ req.rejection_reason }}</p>
+    {% endif %}
+    {% if reports %}
+    <p style="color:var(--review); font-size:0.8rem; margin:0.6rem 0 0;">
+      <strong>Reported {{ reports|length }} time(s)</strong> — under admin review.
+    </p>
+    {% endif %}
+
+    {% if current_user.role not in ['admin'] and req.requester_id != current_user.id %}
+    <div style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--line);">
+      <details>
+        <summary style="cursor:pointer; font-size:0.85rem; color:var(--muted);">Report this request as fake/inappropriate</summary>
+        {% if reported_by_me %}
+        <p style="font-size:0.82rem; color:var(--review); margin:0.6rem 0 0;">You already reported this request. Admins will review it.</p>
+        {% else %}
+        <form method="POST" action="{{ url_for('report_request', req_id=req.id) }}" style="margin-top:0.6rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+          <input type="text" name="reason" placeholder="Reason (e.g. fake contact, duplicate)" required
+                 style="flex:1; min-width:180px; padding:0.35rem; font-size:0.82rem;">
+          <button type="submit" class="btn btn-sm btn-outline">Report</button>
+        </form>
+        {% endif %}
+      </details>
+    </div>
+    {% endif %}
+
+    {% if status_log %}
+    <h4 style="margin-top:1rem; margin-bottom:0.5rem;">Status History</h4>
+    <ul style="list-style:none; padding:0; font-size:0.85rem;">
+      {% for log in status_log %}
+      <li style="padding:0.3rem 0; border-bottom:1px dashed var(--line);">
+        <span style="color:var(--muted);">{{ log.created_at.strftime('%d %b %H:%M') }}</span>
+        &rarr; <strong>{{ log.new_status }}</strong>
+        {% if log.changed_by %}<span style="color:var(--muted);"> by {{ log.changed_by.name }}</span>{% endif %}
+        {% if log.note %}<br><span style="color:var(--muted); font-style:italic;">{{ log.note }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Hospital Location — {{ req.hospital }}</h3>
+  {% if hospital_embed_url %}
+    <iframe src="{{ hospital_embed_url }}" width="100%" height="300"
+            style="border:0; border-radius:8px;" allowfullscreen loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <div style="display:flex; gap:0.5rem; margin-top:0.7rem; flex-wrap:wrap;">
+      {% if hospital_directions_url %}
+      <a class="btn btn-sm btn-outline" target="_blank" rel="noopener"
+         href="{{ hospital_directions_url }}">Get Directions</a>
+      {% endif %}
+      {% if hospital_search_url %}
+      <a class="btn btn-sm btn-outline" target="_blank" rel="noopener"
+         href="{{ hospital_search_url }}">Open in Google Maps</a>
+      {% endif %}
+    </div>
+    {% if hospital_coords and requester_coords and hospital_coords != requester_coords %}
+    <p style="font-size:0.78rem; color:var(--muted); margin:0.5rem 0 0;">
+      Your registered location
+      ({{ "%.4f"|format(requester_coords[0]) }}, {{ "%.4f"|format(requester_coords[1]) }})
+      is the reference point used when ranking nearby donors.
+    </p>
+    {% endif %}
+  {% else %}
+    <p style="color:var(--muted); font-size:0.9rem;">
+      We couldn't pin down the hospital's coordinates. It may still appear in
+      the donor ranking using the patient's registered area.
+    </p>
+    {% if hospital_search_url %}
+    <a class="btn btn-sm btn-outline" target="_blank" rel="noopener"
+       href="{{ hospital_search_url }}">Search on Google Maps</a>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% if req.report_data %}
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Lab Report (AI-Read Values)</h3>
+  <p style="font-size:0.85rem; color:var(--muted); margin-bottom:0.8rem;">
+    Condition severity was scored automatically from these lab values.
+  </p>
+  <table style="width:100%; font-size:0.9rem;">
+    <tr><th style="text-align:left; color:var(--muted); padding:0.3rem 0;">Marker</th><th style="text-align:left; color:var(--muted); padding:0.3rem 0;">Value</th><th style="text-align:left; color:var(--muted); padding:0.3rem 0;">Severity</th></tr>
+    {% for marker, val in report_data.get('findings', {}).items() %}
+    <tr>
+      <td style="padding:0.3rem 0; text-transform:capitalize;">{{ marker }}</td>
+      <td style="padding:0.3rem 0;">{{ val[0] }}</td>
+      <td style="padding:0.3rem 0;">{{ val[1] }}/5</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% if current_user.role == 'donor' and req.status not in ['Fulfilled', 'Cancelled'] %}
+  {% if current_user.blood_group in compat.get(req.blood_group, []) %}
+  <div class="panel-card" style="margin-top:1.2rem; border-color:var(--low); background:var(--low-bg);">
+    <h3 style="color:var(--low);">You are a compatible donor!</h3>
+    <p style="font-size:0.9rem; color:var(--muted);">Your blood group ({{ current_user.blood_group }}) can donate to this patient ({{ req.blood_group }}).</p>
+    <form method="POST" action="{{ url_for('accept_request', req_id=req.id) }}" style="margin-top:0.8rem;">
+      <button type="submit" class="btn btn-primary">I Can Donate</button>
+    </form>
+  </div>
+  {% endif %}
+{% endif %}
+
+{% if acceptances %}
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Donor Responses</h3>
+  <ul class="list-plain">
+    {% for a in acceptances %}
+    <li>
+      <span>
+        <strong>{{ a.donor.name }}</strong> ({{ a.donor.blood_group }}) - {{ a.donor.location or "N/A" }}
+        <span class="badge-status {{ a.status|replace(' ', '-') }}">{{ a.status }}</span>
+      </span>
+      {% if (current_user.id == req.requester_id or current_user.role == 'admin') and a.status == 'Pending' %}
+      <span style="display:flex; gap:0.3rem;">
+        <form method="POST" action="{{ url_for('update_acceptance_status', acceptance_id=a.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Accepted">
+          <button type="submit" class="btn btn-sm btn-outline">Accept</button>
+        </form>
+        <form method="POST" action="{{ url_for('update_acceptance_status', acceptance_id=a.id) }}" style="display:inline;">
+          <input type="hidden" name="new_status" value="Rejected">
+          <button type="submit" class="btn btn-sm btn-outline">Reject</button>
+        </form>
+      </span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if top_recommendations and (current_user.id == req.requester_id or current_user.role == 'admin') %}
+<div class="panel-card" style="margin-top:1.2rem; border-color:var(--review); background:var(--review-bg);">
+  <h3 style="color:var(--review);">
+    AI Recommended Donors (Top {{ top_recommendations|length }})
+    <a href="{{ url_for('request_recommendations', req_id=req.id) }}" class="btn btn-sm btn-outline">View full AI recommendations &rarr;</a>
+  </h3>
+  <table class="request-table" style="margin-top:0.8rem;">
+    <thead><tr><th>Rank</th><th>Name</th><th>Blood Group</th><th>Distance</th><th>Score</th><th>Eligibility</th></tr></thead>
+    <tbody>
+      {% for r in top_recommendations %}
+      <tr>
+        <td><span class="rank-badge rank-top">{{ r.rank }}</span></td>
+        <td>
+          <strong>{{ r.name }}</strong>
+          {% if r.phone %}<span class="mono" style="font-size:0.85rem; color:var(--muted);"> &middot; {{ r.phone }}</span>{% endif %}
+        </td>
+        <td><span class="bg-pill">{{ r.blood_group }}</span></td>
+        <td>{{ r.distance_label }}</td>
+        <td>
+          <span class="mono">{{ r.score }}</span>
+          <div class="score-bar"><span style="width: {{ r.score }}%;"></span></div>
+        </td>
+        <td>
+          <span class="badge badge-low" style="font-size:0.85rem;">&#10004; Eligible</span>
+          <br>
+          <span style="font-size:0.82rem; color:var(--muted);">
+            Last: {{ r.last_donation_date.strftime('%d %b %Y') if r.last_donation_date else '—' }}
+            &middot; Next: {{ r.next_eligible_date.strftime('%d %b %Y') if r.next_eligible_date else '—' }}
+            &middot; {{ r.donation_count }} donations / {{ r.total_bags }} bags
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if compatible_donors and (current_user.id == req.requester_id or current_user.role == 'admin') %}
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Compatible Donors ({{ compatible_donors|length }})</h3>
+  {% if compatible_donors %}
+  <table class="request-table" style="margin-top:0.8rem;">
+    <thead><tr><th>Name</th><th>Blood Group</th><th>Location</th><th>Phone</th><th>Eligibility</th></tr></thead>
+    <tbody>
+      {% for v in compatible_donor_views %}
+      <tr>
+        <td>{{ v.donor.name }}</td>
+        <td><span class="bg-pill">{{ v.donor.blood_group }}</span></td>
+        <td>{{ v.donor.location or "—" }}</td>
+        <td>{{ v.donor.phone or "—" }}</td>
+        <td>
+          {% if v.status.eligible %}
+            <span class="badge badge-low">&#10004; Eligible</span>
+            {% if v.status.last_donation_date %}
+            <span style="font-size:0.82rem; color:var(--muted);"> Next: {{ v.status.next_eligible_date.strftime('%d %b %Y') }}</span>
+            {% endif %}
+          {% else %}
+            <span class="badge badge-critical">&#10060; Not Eligible</span>
+            <br>
+            <span style="font-size:0.82rem; color:var(--critical); font-style:italic;">{{ v.status.reason }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted); font-size:0.9rem;">No available compatible donors found.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

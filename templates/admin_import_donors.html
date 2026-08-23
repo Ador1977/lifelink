@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Bulk Donor Import — LifeLink{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem;">
+  <a href="{{ url_for('admin_dashboard') }}" class="btn btn-sm btn-outline">&larr; Admin Panel</a>
+  <h2 style="margin:0;">Bulk Donor Import</h2>
+</div>
+
+{% if preview is none %}
+<div class="panel-card">
+  <h3>Paste a donor roster</h3>
+  <p style="font-size:0.85rem; color:var(--muted); margin:0.3rem 0 0.8rem;">
+    Paste a plain-text donor list (like the one a blood-donation group shares on
+    Facebook) or a CSV/TSV table. The free-form parser understands the common
+    layout <strong>SI No. / Blood Group / Area / Name / Phone</strong> across
+    multiple lines, handles OCR mistakes such as <strong>0+ → O+</strong>, phone
+    numbers like <strong>01710-027589</strong>, page markers like
+    <strong>25/25</strong>, and merges multi-phone rows. Nothing is written to
+    the database until you review and confirm the preview.
+  </p>
+  <form method="POST" action="{{ url_for('admin_import_donors_preview') }}">
+    <div class="form-group">
+      <label>Donor list (paste here)</label>
+      <textarea name="donor_text" rows="14" placeholder="962&#10;0+&#10;Zirabo&#10;Mr. Ashik&#10;01710-027589&#10;963&#10;O-&#10;Badda&#10;Hridoy Islam Hridu&#10;01683-626187&#10;...">{{ donor_text }}</textarea>
+    </div>
+    <div class="form-row" style="max-width:420px;">
+      <div class="form-group">
+        <label>Input format</label>
+        <select name="mode">
+          <option value="auto" {% if mode == 'auto' %}selected{% endif %}>Auto-detect</option>
+          <option value="freeform" {% if mode == 'freeform' %}selected{% endif %}>Free-form roster text</option>
+          <option value="csv" {% if mode == 'csv' %}selected{% endif %}>CSV / TSV</option>
+        </select>
+        <span class="hint">CSV columns: si_no, blood_group, area, name, phone[, phone2...]</span>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Preview Import</button>
+  </form>
+</div>
+{% else %}
+<div class="panel-card">
+  <h3>Preview — {{ preview|length }} record(s) found</h3>
+  <p style="font-size:0.85rem; color:var(--muted); margin:0.3rem 0 0.8rem;">
+    Check the boxes for the rows you want to import. You can fix the blood group,
+    area, name, and phone inline before importing. Rows with errors stay
+    unchecked until they are corrected. Imported donors get a synthetic email
+    (<code>donor.&lt;phone&gt;@import.lifelink</code>), default password
+    <code>Donor@1234</code>, and are marked with a verified blood group and their
+    area as location.
+  </p>
+  <form method="POST" action="{{ url_for('admin_import_donors_commit') }}">
+    <div style="overflow-x:auto;">
+    <table class="request-table" style="margin-top:0.6rem;">
+      <thead>
+        <tr>
+          <th>Import</th><th>SI No.</th><th>Blood Group</th><th>Area</th>
+          <th>Name</th><th>Phone</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in preview %}
+        <tr>
+          <td style="text-align:center;">
+            <input type="checkbox" name="include_{{ loop.index0 }}" {% if not r.errors %}checked{% endif %}>
+          </td>
+          <td><input type="text" name="si_no_{{ loop.index0 }}" value="{{ r.si_no or '' }}" style="width:52px; padding:0.3rem; font-size:0.8rem;"></td>
+          <td>
+            <select name="blood_group_{{ loop.index0 }}" style="padding:0.3rem; font-size:0.8rem;">
+              {% for bg in blood_groups %}
+              <option value="{{ bg }}" {% if r.blood_group == bg %}selected{% endif %}>{{ bg }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td><input type="text" name="area_{{ loop.index0 }}" value="{{ r.area or '' }}" style="width:120px; padding:0.3rem; font-size:0.8rem;"></td>
+          <td><input type="text" name="name_{{ loop.index0 }}" value="{{ r.name or '' }}" style="width:220px; padding:0.3rem; font-size:0.8rem;"></td>
+          <td><input type="text" name="phone_{{ loop.index0 }}" value="{{ r.phones[0] if r.phones else '' }}" style="width:130px; padding:0.3rem; font-size:0.8rem;"></td>
+          <td style="font-size:0.78rem;">
+            {% for e in r.errors %}
+              <span class="badge badge-critical" style="margin-bottom:0.15rem;">{{ e }}</span>
+            {% endfor %}
+            {% for w in r.warnings %}
+              <span class="badge badge-medium" style="margin-bottom:0.15rem;">{{ w }}</span>
+            {% endfor %}
+            {% if r.phones|length > 1 %}
+              <span class="badge badge-medium" style="margin-bottom:0.15rem;">+{{ r.phones|length - 1 }} extra phone(s)</span>
+            {% endif %}
+            {% if not r.errors and not r.warnings %}
+              <span class="badge badge-low">Ready</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div style="display:flex; gap:1rem; align-items:center; margin-top:1rem;">
+      <button type="submit" class="btn btn-primary">Import Checked Donors</button>
+      <a href="{{ url_for('admin_import_donors_page') }}" class="btn btn-outline">Back — Edit the List</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

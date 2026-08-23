@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Donor Dashboard — LifeLink{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h2>Welcome, {{ current_user.name }}</h2>
+    <p class="page-sub">Donor control panel &middot; Blood group <span class="bg-pill">{{ current_user.blood_group or "N/A" }}</span></p>
+  </div>
+  <div class="page-actions">
+    <span class="btn btn-outline" style="cursor:default;">
+      Availability: {% if current_user.is_available_donor %}<span class="badge badge-available">Available</span>{% else %}<span class="badge badge-unavailable">Unavailable</span>{% endif %}
+    </span>
+    <a href="{{ url_for('toggle_my_availability') }}" class="btn btn-outline">Toggle</a>
+  </div>
+</div>
+
+<div class="stats-grid" style="margin-top:1.2rem;">
+  <div class="stat-cell {% if view.status.eligible %}tone-green{% else %}tone-red{% endif %}">
+    <div class="stat-num">
+      {% if view.status.eligible %}<span style="color: var(--low);">Eligible</span>
+      {% else %}<span style="color: var(--critical);">Not Eligible</span>{% endif %}
+    </div>
+    <div class="stat-label">Donation Status</div>
+  </div>
+  <div class="stat-cell tone-blue"><div class="stat-num">{{ view.total_donations }}</div><div class="stat-label">Total Donations</div></div>
+  <div class="stat-cell tone-green"><div class="stat-num">{{ view.total_bags }}</div><div class="stat-label">Bags Donated</div></div>
+  <div class="stat-cell tone-gray"><div class="stat-num">{{ view.interval_days }}</div><div class="stat-label">Waiting Period (days)</div></div>
+</div>
+
+<div class="panel-card {% if view.status.eligible %}result-box eligible{% else %}result-box not-eligible{% endif %}" style="margin-top:1.2rem;">
+  <h3>Eligibility</h3>
+  <p style="margin:0.5rem 0 0; color:var(--muted); font-size:0.9rem;">
+    {% if view.status.eligible %}<span class="badge badge-eligible">Eligible to Donate</span>{% endif %}
+    {{ view.status.reason }}
+    {% if view.status.next_eligible_date %}
+      &middot; Next eligible: <strong>{{ view.status.next_eligible_date.strftime('%d %b %Y') }}</strong>
+    {% endif %}
+    {% if view.status.last_donation_date %}
+      &middot; Last donation: {{ view.status.last_donation_date.strftime('%d %b %Y') }}
+    {% endif %}
+  </p>
+</div>
+
+<h3 class="section-title" style="font-size:1.2rem; margin-top:2rem;">Matching Blood Requests (nearest first)</h3>
+<form method="GET" action="{{ url_for('donor_dashboard') }}" class="panel-card" style="margin-bottom:1rem;">
+  <div class="form-row">
+    <div class="form-group">
+      <label>Search</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Hospital or patient...">
+    </div>
+    <div class="form-group">
+      <label>Patient Blood Group</label>
+      <select name="blood_group">
+        <option value="">All compatible</option>
+        {% for bg in all_blood_groups %}
+        <option value="{{ bg }}" {{ 'selected' if bg_filter == bg }}>{{ bg }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Urgency</label>
+      <select name="urgency">
+        <option value="">All</option>
+        {% for u in ['Critical','High','Medium','Low'] %}
+        <option value="{{ u }}" {{ 'selected' if urgency_filter == u }}>{{ u }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="align-self:end;">
+      <button type="submit" class="btn btn-outline">Filter</button>
+      <a href="{{ url_for('donor_dashboard') }}" class="btn btn-outline">Clear</a>
+    </div>
+  </div>
+</form>
+{% if matching %}
+<table class="request-table">
+  <thead>
+    <tr><th>Patient</th><th>Group</th><th>Hospital</th><th>Urgency</th><th>Distance</th><th>Status</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    {% for r, dist in matching %}
+    <tr>
+      <td>{{ r.patient_name }}</td>
+      <td><span class="bg-pill">{{ r.blood_group }}</span></td>
+      <td>{{ r.hospital }}</td>
+      <td>
+        {% if r.urgency_level == 'Critical' %}<span class="badge badge-critical pulse">Critical</span>
+        {% elif r.urgency_level == 'High' %}<span class="badge badge-high">High</span>
+        {% elif r.urgency_level == 'Medium' %}<span class="badge badge-medium">Medium</span>
+        {% elif r.urgency_level == 'Low' %}<span class="badge badge-low">Low</span>
+        {% else %}<span class="badge badge-review">{{ r.urgency_level }}</span>{% endif %}
+      </td>
+      <td>{% if dist is not none %}{{ "%.1f"|format(dist) }} km{% else %}—{% endif %}</td>
+      <td><span class="badge-status {{ r.status|replace(' ', '-') }}">{{ r.status }}</span></td>
+      <td>
+        <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline">View</a>
+        {% set offer_status = my_offer_status.get(r.id) %}
+        {% if not offer_status %}
+        <form method="POST" action="{{ url_for('accept_request', req_id=r.id) }}" style="display:inline;">
+          <button type="submit" class="btn btn-sm btn-outline">Offer to Donate</button>
+        </form>
+        {% elif offer_status == 'Pending' %}<span class="badge badge-review">Offer pending</span>
+        {% elif offer_status == 'Accepted' %}<span class="badge badge-low">Accepted</span>
+        {% else %}<span class="badge badge-critical">Declined</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="panel-card" style="text-align:center; padding:2rem;">
+  <p style="color:var(--muted);">No open requests match your blood group right now.</p>
+</div>
+{% endif %}
+
+<div class="card-grid" style="margin-top:2rem;">
+  <div class="panel-card">
+    <h3>Recent Donation History</h3>
+    {% if donations %}
+    <ul class="list-plain">
+      {% for d in donations %}
+      <li>
+        <span>{{ d.donation_date.strftime('%d %b %Y') }} &middot; {{ d.bags }} bag(s) &middot; <span class="bg-pill">{{ d.blood_group }}</span></span>
+        <span style="font-size:0.92rem; color:var(--muted);">{{ d.donation_location or '' }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No donations recorded yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel-card">
+    <h3>My Offers &amp; Notifications</h3>
+    {% if my_acceptances %}
+    <p style="margin:0.2rem 0 0.4rem; font-size:0.92rem; color:var(--muted);">Recent responses:</p>
+    <ul class="list-plain">
+      {% for a in my_acceptances %}
+      <li>
+        <span>Request <a href="{{ url_for('request_detail', req_id=a.blood_request.id) }}">#{{ a.blood_request.id }}</a>
+          {% if a.status == 'Pending' %}<span class="badge badge-review">Pending</span>
+          {% elif a.status == 'Accepted' %}<span class="badge badge-low">Accepted</span>
+          {% else %}<span class="badge badge-critical">Rejected</span>{% endif %}
+        </span>
+        <span style="font-size:0.92rem; color:var(--muted);">{{ a.created_at.strftime('%d %b, %H:%M') if a.created_at }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if recent_notifications %}
+    <ul class="list-plain">
+      {% for n in recent_notifications %}
+      <li>
+        <span><strong>{{ n.title }}</strong><br><span style="font-size:0.9rem;">{{ n.message }}</span></span>
+        <span style="font-size:0.92rem; color:var(--muted);">{{ n.created_at.strftime('%d %b, %H:%M') if n.created_at }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <a href="{{ url_for('notifications') }}" class="btn btn-sm btn-outline" style="margin-top:0.6rem;">View all</a>
+    {% elif not my_acceptances %}
+    <p class="empty-state">No activity yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

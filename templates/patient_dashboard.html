@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Patient Dashboard — LifeLink{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h2>Welcome, {{ current_user.name }}</h2>
+    <p class="page-sub">Patient control panel &middot; Blood group <span class="bg-pill">{{ current_user.blood_group or "N/A" }}</span></p>
+  </div>
+  <div class="page-actions">
+    <a href="{{ url_for('create_request') }}" class="btn btn-primary">+ New Blood Request</a>
+  </div>
+</div>
+
+<div class="stats-grid cols-3" style="margin-top:1.2rem;">
+  <div class="stat-cell tone-gray"><div class="stat-num">{{ stats.total }}</div><div class="stat-label">Total Requests</div></div>
+  <div class="stat-cell tone-blue"><div class="stat-num">{{ stats.active }}</div><div class="stat-label">Active Requests</div></div>
+  <div class="stat-cell tone-green"><div class="stat-num">{{ stats.approved }}</div><div class="stat-label">Approved</div></div>
+  <div class="stat-cell tone-green"><div class="stat-num">{{ stats.fulfilled }}</div><div class="stat-label">Fulfilled</div></div>
+  <div class="stat-cell tone-amber"><div class="stat-num">{{ stats.pending }}</div><div class="stat-label">Pending / Review</div></div>
+  <div class="stat-cell tone-red"><div class="stat-num">{{ stats.rejected }}</div><div class="stat-label">Rejected</div></div>
+</div>
+
+<div class="card-grid" style="margin-top:1.5rem;">
+  <div class="panel-card">
+    <h3>My Blood Requests</h3>
+    {% if my_requests %}
+    <ul class="list-plain">
+      {% for r in my_requests %}
+      <li style="flex-direction:column; align-items:flex-start; gap:0.3rem; {% if r.urgency_level in ['Critical', 'High'] %}border-left:4px solid var(--critical); padding-left:0.75rem; background:var(--primary-light); border-radius:8px;{% endif %}">
+        <span style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+          <span class="badge-status {{ r.status|replace(' ', '-') }}">{{ r.status }}</span>
+          <span class="bg-pill">{{ r.blood_group }}</span> &middot; {{ r.units_needed }} unit(s) &middot; {{ r.hospital }}
+          {% if r.urgency_level == 'Critical' %}<span class="badge badge-critical pulse">Critical</span>
+          {% elif r.urgency_level == 'High' %}<span class="badge badge-high">High</span>
+          {% elif r.urgency_level == 'Medium' %}<span class="badge badge-medium">Medium</span>
+          {% elif r.urgency_level == 'Low' %}<span class="badge badge-low">Low</span>
+          {% else %}<span class="badge badge-review">{{ r.urgency_level }}</span>{% endif %}
+        </span>
+        {% if r.rejection_reason %}
+        <span style="font-size:0.9rem; color:var(--critical);">Rejected: {{ r.rejection_reason }}</span>
+        {% endif %}
+        <span style="display:flex; gap:0.4rem;">
+          <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline">View</a>
+          <a href="{{ url_for('request_recommendations', req_id=r.id) }}" class="btn btn-sm btn-outline">Donors</a>
+          {% if r.status in ['Pending', 'Under Review', 'Approved', 'Matched'] %}
+          <form method="POST" action="{{ url_for('update_request_status', req_id=r.id) }}" style="display:inline;">
+            <input type="hidden" name="new_status" value="Cancelled">
+            <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Cancel this request?')">Cancel</button>
+          </form>
+          {% endif %}
+        </span>
+        {% set recs = compatible_donors.get(r.id, []) %}
+        {% if recs %}
+        <span style="font-size:0.9rem; color:var(--muted);">
+          Suitable donors (top {{ recs|length }}):
+          {% for rec in recs %}{{ rec.name }} ({{ rec.blood_group }}, {{ rec.distance_label }}){% if not loop.last %} &middot; {% endif %}{% endfor %}
+        </span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">You haven't submitted any blood requests yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel-card">
+    <h3>Donor Offers</h3>
+    {% if acceptances %}
+    <ul class="list-plain">
+      {% for a in acceptances %}
+      <li>
+        <span>
+          <strong>{{ a.donor.name }}</strong> ({{ a.donor.blood_group }})
+          &middot; request <a href="{{ url_for('request_detail', req_id=a.blood_request.id) }}">#{{ a.blood_request.id }}</a>
+          {% if a.status == 'Pending' %}<span class="badge badge-review">Pending</span>
+          {% elif a.status == 'Accepted' %}<span class="badge badge-low">Accepted</span>
+          {% else %}<span class="badge badge-critical">Rejected</span>{% endif %}
+        </span>
+        <span style="display:flex; gap:0.3rem;">
+          {% if a.status == 'Pending' %}
+          <form method="POST" action="{{ url_for('update_acceptance_status', acceptance_id=a.id) }}" style="display:inline;">
+            <input type="hidden" name="new_status" value="Accepted">
+            <button type="submit" class="btn btn-sm btn-success">Accept</button>
+          </form>
+          <form method="POST" action="{{ url_for('update_acceptance_status', acceptance_id=a.id) }}" style="display:inline;">
+            <input type="hidden" name="new_status" value="Rejected">
+            <button type="submit" class="btn btn-sm btn-danger">Decline</button>
+          </form>
+          {% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No donor offers yet. Approving a request notifies compatible donors.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card-grid" style="margin-top:1.5rem;">
+  <div class="panel-card">
+    <h3>Recent Notifications</h3>
+    {% if recent_notifications %}
+    <ul class="list-plain">
+      {% for n in recent_notifications %}
+      <li>
+        <span><strong>{{ n.title }}</strong><br><span style="font-size:0.9rem;">{{ n.message }}</span></span>
+        <span style="font-size:0.85rem; color:var(--muted);">{{ n.created_at.strftime('%d %b, %H:%M') if n.created_at }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <a href="{{ url_for('notifications') }}" class="btn btn-sm btn-outline" style="margin-top:0.6rem;">View all</a>
+    {% else %}
+    <p class="empty-state">No notifications yet.</p>
+    {% endif %}
+  </div>
+  <div class="panel-card">
+    <h3>Quick Actions</h3>
+    <ul class="list-plain">
+      <li><a href="{{ url_for('create_request') }}">Submit a new blood request</a></li>
+      <li><a href="{{ url_for('requests_list') }}">Browse the triage board</a></li>
+      <li><a href="{{ url_for('donor_search') }}">Find donors near you</a></li>
+      <li><a href="{{ url_for('profile') }}">Update profile &amp; location</a></li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

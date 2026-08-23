@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}AI Recommendations — Request #{{ req.id }} — LifeLink{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
+  <a href="{{ url_for('request_detail', req_id=req.id) }}" class="btn btn-sm btn-outline">&larr; Back to Request</a>
+  <h2 style="margin:0;">AI Recommended Donors</h2>
+</div>
+
+<div class="card-grid" style="margin-top:0;">
+  <div class="panel-card">
+    <h3>Request Summary</h3>
+    <table style="width:100%; font-size:0.9rem;">
+      <tr><td style="color:var(--muted); padding:0.35rem 0;">Patient</td><td style="padding:0.35rem 0;"><strong>{{ req.patient_name }}</strong></td></tr>
+      <tr><td style="color:var(--muted); padding:0.35rem 0;">Blood Needed</td><td style="padding:0.35rem 0;"><span class="bg-pill">{{ req.blood_group }}</span> &middot; {{ req.units_needed }} unit(s)</td></tr>
+      <tr><td style="color:var(--muted); padding:0.35rem 0;">Location</td><td style="padding:0.35rem 0;">{{ result.summary.patient_location }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.35rem 0;">Hospital</td><td style="padding:0.35rem 0;">{{ req.hospital }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.35rem 0;">Urgency</td><td style="padding:0.35rem 0;">
+        {% if req.urgency_level == 'Critical' %}<span class="badge badge-critical pulse">{{ req.urgency_level }}</span>
+        {% elif req.urgency_level == 'High' %}<span class="badge badge-high">{{ req.urgency_level }}</span>
+        {% elif req.urgency_level == 'Medium' %}<span class="badge badge-medium">{{ req.urgency_level }}</span>
+        {% elif req.urgency_level == 'Low' %}<span class="badge badge-low">{{ req.urgency_level }}</span>
+        {% else %}<span class="badge badge-review">{{ req.urgency_level }}</span>{% endif %}
+      </td></tr>
+    </table>
+  </div>
+  <div class="panel-card">
+    <h3>How donors are ranked</h3>
+    <p style="font-size:0.85rem; color:var(--muted); margin:0.4rem 0 0;">
+      1. <strong>Rule-based filters</strong> remove donors who are incompatible, unavailable,
+      failed screening, or out of the 18-65 age range.<br>
+      2. <strong>Donation-history eligibility</strong> (auto-computed from each donor's last
+      donation + the configured waiting period) decides who can donate <em>right now</em> —
+      only eligible donors are ranked; the rest appear under "Currently Not Eligible".<br>
+      3. A <strong>machine-learning model</strong> (GradientBoosting) scores every eligible donor on
+      compatibility, distance, reliability, experience, recency and reachability.<br>
+      4. For this <strong>{{ req.urgency_level }}</strong> request, the final score is
+      {{ "%.0f"|format(result.summary.urgency_boost * 100) }}% driven by proximity, so the nearest
+      eligible donors rise to the top in emergencies.
+    </p>
+  </div>
+</div>
+
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3 style="justify-content:flex-start; gap:0.8rem;">
+    Top Recommended Donors
+    <span class="badge badge-review">{{ result.summary.recommended_count }} of {{ result.summary.eligible_count }} eligible</span>
+  </h3>
+  <form method="GET" class="filter-bar" style="margin:0.8rem 0 1.2rem;">
+    <div class="form-row" style="max-width:340px;">
+      <div class="form-group" style="margin:0;">
+        <label>Preferred way to contact donors</label>
+        <select name="contact_pref" onchange="this.form.submit()">
+          {% for opt in ['Any', 'Phone', 'SMS', 'Email'] %}
+          <option value="{{ opt }}" {% if (contact_pref or 'Any') == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </form>
+
+  {% if result.recommended %}
+  <table class="request-table">
+    <thead>
+      <tr><th>Rank</th><th>Donor</th><th>Distance</th><th>Match</th><th>Score</th><th>Contact</th></tr>
+    </thead>
+    <tbody>
+      {% for r in result.recommended %}
+      <tr>
+        <td><span class="rank-badge rank-top">{{ r.rank }}</span></td>
+        <td>
+          <strong>{{ r.name }}</strong>
+          <br>
+          <span class="bg-pill">{{ r.blood_group }}</span>
+          {% if r.exact_match %}<span class="badge badge-low" style="margin-left:0.3rem;">exact match</span>{% endif %}
+          <span style="font-size:0.85rem; color:var(--muted); margin-left:0.3rem;">{{ r.location or "—" }}</span>
+          <br>
+          <span style="font-size:0.78rem;">
+            <span class="badge badge-low">&#10004; Eligible</span>
+            <span style="color:var(--muted);">Reliability {{ "%.0f"|format(r.reliability * 100) }}%</span>
+            <span style="color:var(--muted);">Model {{ "%.0f"|format(r.model_score * 100) }}%</span>
+          </span>
+          <br>
+          <span style="font-size:0.85rem; color:var(--muted);">
+            Last donation: {{ r.last_donation_date.strftime('%d %b %Y') if r.last_donation_date else '—' }}
+            &middot; Next eligible: {{ r.next_eligible_date.strftime('%d %b %Y') if r.next_eligible_date else '—' }}
+            &middot; Donations: {{ r.donation_count }} &middot; Bags: {{ r.total_bags }}
+          </span>
+        </td>
+        <td>{{ r.distance_label }}</td>
+        <td>
+          <span class="mono" style="font-size:1.05rem; font-weight:600;">{{ r.score }}</span>
+          <div class="score-bar"><span style="width: {{ r.score }}%;"></span></div>
+          <span style="font-size:0.7rem; color:var(--muted);">100 = ideal</span>
+        </td>
+        <td>
+          {{ r.contact_method }}<br>
+          {% if r.phone %}<span class="mono" style="font-size:0.78rem;">{{ r.phone }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="panel-card" style="text-align:center; padding:2rem; margin-top:0.5rem;">
+    <p style="color:var(--muted);">No eligible donors found for this request right now.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if result.not_eligible %}
+<div class="panel-card" style="margin-top:1.2rem; border-color:var(--high); background:var(--high-bg);">
+  <h3 style="color:var(--high);">Currently Not Eligible ({{ result.summary.not_eligible_count }})</h3>
+  <p style="font-size:0.85rem; color:var(--muted); margin:0.4rem 0 0.8rem;">
+    These donors are compatible but their donation history puts them inside the
+    configured waiting period. Their eligibility updates automatically once the
+    date passes — no manual action needed.
+  </p>
+  <table class="request-table">
+    <thead><tr><th>Name</th><th>Blood Group</th><th>Location</th><th>Last Donation</th><th>Next Eligible</th><th>Status</th><th>History</th></tr></thead>
+    <tbody>
+      {% for n in result.not_eligible %}
+      <tr>
+        <td>
+          <strong>{{ n.name }}</strong>
+          {% if n.phone %}<br><span class="mono" style="font-size:0.82rem; color:var(--muted);">{{ n.phone }}</span>{% endif %}
+        </td>
+        <td><span class="bg-pill">{{ n.blood_group }}</span></td>
+        <td>{{ n.location or "—" }}<br><span style="font-size:0.82rem; color:var(--muted);">{{ n.distance_label }}</span></td>
+        <td>{{ n.last_donation_date.strftime('%d %b %Y') if n.last_donation_date else '—' }}</td>
+        <td>{{ n.next_eligible_date.strftime('%d %b %Y') if n.next_eligible_date else '—' }}</td>
+        <td>
+          <span class="badge badge-critical">&#10060; Not Eligible</span>
+          <br>
+          <span style="font-size:0.78rem; color:var(--critical); font-style:italic;">{{ n.reason }}</span>
+        </td>
+        <td style="font-size:0.8rem; color:var(--muted);">
+          {{ n.donation_count }} donation(s) &middot; {{ n.total_bags }} bag(s)
+          {% if n.days_remaining is not none %}<br>{{ n.days_remaining }} day(s) remaining{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if result.excluded %}
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Excluded donors &amp; why ({{ result.summary.excluded_count }})</h3>
+  <details>
+    <summary style="cursor:pointer; font-size:0.85rem; color:var(--muted); margin-bottom:0.6rem;">Show excluded donors</summary>
+    <table class="request-table">
+      <thead><tr><th>Name</th><th>Blood Group</th><th>Location</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for e in result.excluded %}
+        <tr>
+          <td>{{ e.name }}</td>
+          <td><span class="bg-pill">{{ e.blood_group }}</span></td>
+          <td>{{ e.location or "—" }}</td>
+          <td style="color:var(--critical);">{{ e.reasons|join("; ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+</div>
+{% endif %}
+
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Scoring factors (per recommended donor)</h3>
+  <table class="request-table">
+    <thead><tr><th>Donor</th><th>Compatibility</th><th>Distance</th><th>Reliability</th><th>Screening</th><th>Experience</th><th>Recency</th><th>Contact</th></tr></thead>
+    <tbody>
+      {% for r in result.recommended %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td>{{ "%.2f"|format(r.factors.compat) }}</td>
+        <td>{{ "%.2f"|format(r.factors.distance) }}</td>
+        <td>{{ "%.2f"|format(r.factors.reliability) }}</td>
+        <td>{{ "%.2f"|format(r.factors.eligibility) }}</td>
+        <td>{{ "%.2f"|format(r.factors.experience) }}</td>
+        <td>{{ "%.2f"|format(r.factors.recency) }}</td>
+        <td>{{ "%.2f"|format(r.factors.contact) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="font-size:0.78rem; color:var(--muted); margin-top:0.6rem;">
+    Factors are normalized 0-1 and feed the GradientBoosting model. Final score =
+    (1 - urgency boost) &times; model score &times; 100 + urgency boost &times; proximity &times; 100,
+    plus a +2 exact-match bonus.
+  </p>
+</div>
+{% endblock %}

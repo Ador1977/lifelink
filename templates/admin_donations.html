@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Donation Ledger — LifeLink{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem;">
+  <a href="{{ url_for('admin_dashboard') }}" class="btn btn-sm btn-outline">&larr; Admin Panel</a>
+  <h2 style="margin:0;">Donation History Ledger</h2>
+</div>
+
+<div class="stats-grid" style="margin-top:0;">
+  <div class="stat-cell"><div class="stat-num">{{ total_records }}</div><div class="stat-label">Total Donation Records</div></div>
+  <div class="stat-cell"><div class="stat-num">{{ total_bags }}</div><div class="stat-label">Total Bags Donated</div></div>
+</div>
+
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Recent Donations</h3>
+  <table class="request-table" style="margin-top:0.8rem;">
+    <thead>
+      <tr><th>Donor</th><th>Date</th><th>Time</th><th>Blood Group</th><th>Bags</th><th>Location / Hospital</th><th>Next Eligible Date</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for d in donations %}
+      <tr>
+        <td>
+          <a href="{{ url_for('admin_donor_donations', donor_id=d.donor.id) }}">{{ d.donor.name }}</a>
+          <br><span style="font-size:0.82rem; color:var(--muted);">{{ d.donor.email }}</span>
+        </td>
+        <td>{{ d.donation_date.strftime('%d %B %Y') }}</td>
+        <td>{{ d.donation_time or '—' }}</td>
+        <td><span class="bg-pill">{{ d.blood_group }}</span></td>
+        <td>{{ d.bags }}</td>
+        <td>{{ d.donation_location or '—' }}</td>
+        <td>{{ d.next_eligible_date.strftime('%d %b %Y') if d.next_eligible_date else '—' }}</td>
+        <td><span class="badge badge-low" style="font-size:0.85rem;">{{ d.status }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty-state">No donations recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

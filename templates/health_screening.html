@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Donor Health Screening — LifeLink{% endblock %}
+{% block content %}
+<div class="form-card wide">
+  <h2 class="form-title">AI donor health screening</h2>
+  <p class="form-sub">Enter values from your latest blood/health report, or upload your lab report image and let the AI read your hemoglobin from it.</p>
+
+  {% if not vlm_available %}
+  <div style="background:#fff4e5; border:1px solid #f0c36d; color:#7a4d00; padding:1rem; border-radius:8px; margin-bottom:1.25rem; font-size:0.9rem;">
+    <strong>Image scanning isn't set up on this server</strong> (the ollama/Pillow packages aren't installed).
+    Please install them and restart.
+  </div>
+  {% endif %}
+
+  <div class="screening-tabs">
+    <button type="button" class="screening-tab" id="tabManual">Manual Selection</button>
+    <button type="button" class="screening-tab" id="tabUpload">Upload Health Report</button>
+  </div>
+
+  <div id="panelManual" class="screening-panel">
+    <form method="POST">
+      <input type="hidden" name="source" value="manual">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Hemoglobin (g/dL) *<span class="hint">min. 12.5 (M) / 13.0 (F)</span></label>
+          <input type="number" step="0.1" name="hemoglobin" required value="{{ request.form.hemoglobin if result and result.source == 'manual' else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Age (years) *</label>
+          <input type="number" name="age" required value="{{ request.form.age if result and result.source == 'manual' else '' }}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Gender *</label>
+          <select name="gender" required>
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Weight (kg) *<span class="hint">min. 50</span></label>
+          <input type="number" name="weight" required value="{{ request.form.weight if result and result.source == 'manual' else '' }}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Systolic Blood Pressure (mmHg) *<span class="hint">100-180</span></label>
+          <input type="number" name="systolic" required value="{{ request.form.systolic if result and result.source == 'manual' else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Diastolic Blood Pressure (mmHg) *<span class="hint">60-100</span></label>
+          <input type="number" name="diastolic" required value="{{ request.form.diastolic if result and result.source == 'manual' else '' }}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Pulse Rate (bpm) *<span class="hint">50-100</span></label>
+        <input type="number" name="pulse" required value="{{ request.form.pulse if result and result.source == 'manual' else '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Run AI Screening</button>
+    </form>
+  </div>
+
+  <div id="panelUpload" class="screening-panel">
+    <form method="POST" enctype="multipart/form-data" id="uploadForm">
+      <input type="hidden" name="source" value="upload">
+      <div class="form-group">
+        <label>Lab/Blood Report Image *<span class="hint">Clear JPG, JPEG or PNG photo/scan of your report</span></label>
+        <input type="file" name="health_report_image" required accept=".jpg,.jpeg,.png,image/jpeg,image/png">
+      </div>
+      <p class="form-sub" style="margin-top:-0.25rem;">The AI reads your name, age, gender, and hemoglobin from the report image (plus LDL/HDL cholesterol if shown). Weight, blood pressure, and pulse aren't part of a lab report, so please enter those directly below.</p>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Weight (kg) *<span class="hint">min. 50</span></label>
+          <input type="number" name="weight" required value="{{ request.form.weight if result and result.source == 'upload' else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Pulse Rate (bpm) *<span class="hint">50-100</span></label>
+          <input type="number" name="pulse" required value="{{ request.form.pulse if result and result.source == 'upload' else '' }}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Systolic Blood Pressure (mmHg) *<span class="hint">100-180</span></label>
+          <input type="number" name="systolic" required value="{{ request.form.systolic if result and result.source == 'upload' else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Diastolic Blood Pressure (mmHg) *<span class="hint">60-100</span></label>
+          <input type="number" name="diastolic" required value="{{ request.form.diastolic if result and result.source == 'upload' else '' }}">
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="uploadSubmitBtn">Scan &amp; Run AI Screening</button>
+      <p id="uploadWaitNote" style="display:none; text-align:center; font-size:0.8rem; color:var(--muted,#6b7280); margin-top:0.5rem;">Scanning with the local AI model — this can take anywhere from a few seconds to a couple of minutes depending on your hardware. Please don't close this tab.</p>
+    </form>
+  </div>
+
+  {% if result and not result.ocr_debug %}
+  <div class="result-box {{ 'eligible' if result.eligible else 'not-eligible' }}">
+    <h3>{{ "Eligible to Donate" if result.eligible else "Not Eligible Right Now" }}</h3>
+    <p style="font-family: var(--font-mono); font-size:0.85rem; margin:0;">AI confidence: {{ result.confidence }}% &middot; Gender-specific threshold: {{ result.gender_used }} (Hb &ge; {{ result.hgb_threshold }})</p>
+    <ul>
+      {% for reason in result.reasons %}
+      <li>{{ reason }}</li>
+      {% endfor %}
+    </ul>
+    {% if result.extracted %}
+    <div class="extracted-values">
+      <h4>Values read from your report</h4>
+      <ul>
+        {% for label, value in result.extracted.items() %}
+        <li><strong>{{ label }}:</strong> {{ value }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+  {% elif result and result.ocr_debug %}
+  <div class="result-box not-eligible">
+    <h3>Couldn't Read the Full Report</h3>
+    {% if result.found %}
+    <div class="extracted-values">
+      <h4>Values we did find</h4>
+      <ul>
+        {% for label, value in result.found.items() %}
+        <li><strong>{{ label }}:</strong> {{ value }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <p style="margin:0.6rem 0 0.2rem; font-size:0.85rem;"><strong>Missing:</strong> {{ result.missing | join(", ") }}</p>
+    {% if result.raw_text %}
+    <details style="margin-top:0.6rem;">
+      <summary style="cursor:pointer; font-size:0.85rem;">Show the model's raw reply (for debugging)</summary>
+      <pre style="white-space:pre-wrap; font-size:0.8rem; background:var(--panel,#f7f7f7); padding:0.6rem; border-radius:6px;">{{ result.raw_text }}</pre>
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .screening-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--line); }
+  .screening-tab {
+    background: none; border: none; cursor: pointer;
+    padding: 0.6rem 1rem; font-size: 0.95rem; font-weight: 600;
+    color: var(--muted, #6b7280); border-bottom: 2px solid transparent;
+  }
+  .screening-tab.active { color: var(--accent, #b91c1c); border-bottom-color: var(--accent, #b91c1c); }
+  .screening-panel { display: none; }
+  .screening-panel.active { display: block; }
+  .extracted-values { margin-top: 0.9rem; padding-top: 0.75rem; border-top: 1px dashed var(--line); }
+  .extracted-values h4 { margin: 0 0 0.4rem; font-size: 0.9rem; }
+  .extracted-values ul { margin: 0; padding-left: 1.1rem; font-size: 0.85rem; }
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var tabManual = document.getElementById("tabManual");
+  var tabUpload = document.getElementById("tabUpload");
+  var panelManual = document.getElementById("panelManual");
+  var panelUpload = document.getElementById("panelUpload");
+
+  function showManual() {
+    tabManual.classList.add("active");
+    tabUpload.classList.remove("active");
+    panelManual.classList.add("active");
+    panelUpload.classList.remove("active");
+  }
+  function showUpload() {
+    tabUpload.classList.add("active");
+    tabManual.classList.remove("active");
+    panelUpload.classList.add("active");
+    panelManual.classList.remove("active");
+  }
+
+  tabManual.addEventListener("click", showManual);
+  tabUpload.addEventListener("click", showUpload);
+
+  var uploadForm = document.getElementById("uploadForm");
+  var uploadSubmitBtn = document.getElementById("uploadSubmitBtn");
+  var uploadWaitNote = document.getElementById("uploadWaitNote");
+  if (uploadForm) {
+    uploadForm.addEventListener("submit", function () {
+      uploadSubmitBtn.disabled = true;
+      uploadSubmitBtn.textContent = "Scanning report…";
+      uploadWaitNote.style.display = "block";
+    });
+  }
+
+  {% if result and result.source == 'upload' %}
+  showUpload();
+  {% else %}
+  showManual();
+  {% endif %}
+});
+</script>
+{% endblock %}

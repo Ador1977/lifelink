@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}LifeLink — AI Blood Donation Platform{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <div>
+    <span class="eyebrow">Live triage board</span>
+    <h1>Every request, sorted by how urgently it matters.</h1>
+    <p class="lede">
+      LifeLink connects donors, patients, and hospitals directly. An AI model
+      reads each request the moment it's submitted and ranks it Critical,
+      High, Medium, or Low — so the most urgent cases never sit in a queue
+      behind a routine one.
+    </p>
+    <div class="hero-actions">
+      {% if current_user.is_authenticated %}
+        <a href="{{ url_for('create_request') }}" class="btn btn-primary">Submit a blood request</a>
+        <a href="{{ url_for('requests_list') }}" class="btn btn-outline">View triage board</a>
+      {% else %}
+        <a href="{{ url_for('register') }}" class="btn btn-primary">Join as donor / patient</a>
+        <a href="{{ url_for('login') }}" class="btn btn-outline">Log in</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="triage-panel">
+    <h3>Urgency scale — how the AI ranks requests</h3>
+    <div class="triage-row">
+      <span class="badge badge-critical pulse">Critical</span>
+      <div class="triage-bar"><span style="width:95%; background: var(--critical);"></span></div>
+      <span>Immediate</span>
+    </div>
+    <div class="triage-row">
+      <span class="badge badge-high">High</span>
+      <div class="triage-bar"><span style="width:72%; background: var(--high);"></span></div>
+      <span>&lt; 12 hrs</span>
+    </div>
+    <div class="triage-row">
+      <span class="badge badge-medium">Medium</span>
+      <div class="triage-bar"><span style="width:48%; background: var(--medium);"></span></div>
+      <span>&lt; 48 hrs</span>
+    </div>
+    <div class="triage-row">
+      <span class="badge badge-low">Low</span>
+      <div class="triage-bar"><span style="width:22%; background: var(--low);"></span></div>
+      <span>Planned</span>
+    </div>
+  </div>
+</section>
+
+<section class="stats-grid">
+  <div class="stat-cell">
+    <div class="stat-num">{{ total_donors }}</div>
+    <div class="stat-label">Registered donors</div>
+  </div>
+  <div class="stat-cell critical">
+    <div class="stat-num">{{ critical_active }}</div>
+    <div class="stat-label">Active critical requests</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-num">{{ total_requests }}</div>
+    <div class="stat-label">Total requests logged</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-num">{{ fulfilled }}</div>
+    <div class="stat-label">Requests fulfilled</div>
+  </div>
+</section>
+
+<h2 class="section-title">How the platform works</h2>
+<div class="how-grid">
+  <div class="how-step">
+    <span class="step-tag">01 · Register</span>
+    <h4>Create an account</h4>
+    <p>Sign up as a donor, patient, or hospital contact with your blood group and location.</p>
+  </div>
+  <div class="how-step">
+    <span class="step-tag">02 · Request</span>
+    <h4>Submit a blood request</h4>
+    <p>Describe the patient's condition and timeframe — the AI reads it instantly.</p>
+  </div>
+  <div class="how-step">
+    <span class="step-tag">03 · Rank</span>
+    <h4>AI urgency detection</h4>
+    <p>A trained model scores the request Critical / High / Medium / Low in real time.</p>
+  </div>
+  <div class="how-step">
+    <span class="step-tag">04 · Screen</span>
+    <h4>Donor health screening</h4>
+    <p>Donors run their latest report through the AI eligibility check before donating.</p>
+  </div>
+</div>
+
+{% endblock %}

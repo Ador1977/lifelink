@@ -1,0 +1,63 @@
+{% macro urgency_badge(level, confidence=None) %}
+  {% if level == 'Critical' %}
+    <span class="badge badge-critical pulse">{{ level }}</span>
+  {% elif level == 'High' %}
+    <span class="badge badge-high">{{ level }}</span>
+  {% elif level == 'Medium' %}
+    <span class="badge badge-medium">{{ level }}</span>
+  {% elif level == 'Low' %}
+    <span class="badge badge-low">{{ level }}</span>
+  {% else %}
+    <span class="badge badge-review">{{ level }}</span>
+  {% endif %}
+  {% if confidence is not none %}
+    <div style="font-size:0.78rem; color:var(--muted); margin-top:2px;">{{ confidence }}% conf.</div>
+  {% endif %}
+{% endmacro %}
+
+{% macro status_badge(status) %}
+  <span class="badge-status {{ status|replace(' ', '-') }}">{{ status }}</span>
+{% endmacro %}
+
+{% macro notif_type_badge(type) %}
+  {% if type %}
+    {% set classes = {
+      'request_approved': 'type-success', 'request_fulfilled': 'type-success',
+      'donation_recorded': 'type-success', 'donor_offer_accepted': 'type-success',
+      'eligible_again': 'type-success',
+      'request_created': 'type-info', 'request_review': 'type-info',
+      'donor_offer': 'type-pending',
+      'request_rejected': 'type-danger', 'request_reported': 'type-danger',
+      'request_cancelled': 'type-system'
+    } %}
+    <span class="badge {{ classes.get(type, 'type-system') }}">{{ type|replace('_', ' ') }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro request_row(r, show_actions=true, compat=None) %}
+  <tr>
+    <td>
+      {{ urgency_badge(r.urgency_level, r.urgency_confidence) }}
+    </td>
+    <td>{{ r.patient_name }}</td>
+    <td><span class="bg-pill">{{ r.blood_group }}</span></td>
+    <td>{{ r.units_needed }}</td>
+    <td>{{ r.hospital }}</td>
+    <td>{{ r.hours_needed }} hrs</td>
+    <td>{{ status_badge(r.status) }}</td>
+    {% if compat %}
+      <td style="font-size:0.85rem; color:var(--muted);">{{ compat[r.blood_group]|join(", ") }}</td>
+    {% endif %}
+    {% if show_actions %}
+    <td>
+      {% if current_user.role == 'admin' or r.requester_id == current_user.id %}
+        {% if r.status not in ['Fulfilled', 'Cancelled'] %}
+        <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline">View</a>
+        {% endif %}
+      {% else %}
+        <a href="{{ url_for('request_detail', req_id=r.id) }}" class="btn btn-sm btn-outline">View</a>
+      {% endif %}
+    </td>
+    {% endif %}
+  </tr>
+{% endmacro %}

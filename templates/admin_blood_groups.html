@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Blood Group Reviews — LifeLink{% endblock %}
+{% block content %}
+<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem;">
+  <a href="{{ url_for('admin_dashboard') }}" class="btn btn-sm btn-outline">&larr; Admin Panel</a>
+  <h2 style="margin:0;">Blood Group Reviews</h2>
+</div>
+
+<div class="panel-card">
+  <h3>Needs Review ({{ needs_review|length }})</h3>
+  <p style="font-size:0.85rem; color:var(--muted); margin:0.3rem 0 0.8rem;">
+    Donors whose blood group was flagged (uncertain / conflicting / unverified) by
+    the card scanner. Their group is not used for matching until you confirm it.
+  </p>
+  {% if needs_review %}
+  <table class="request-table" style="margin-top:0.6rem;">
+    <thead>
+      <tr><th>Donor</th><th>Current Group</th><th>Detected</th><th>Confidence</th><th>Card Details</th><th>Reason</th><th>Card Image</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for d in needs_review %}
+      <tr>
+        <td>
+          <strong>{{ d.name }}</strong><br>
+          <span style="color:var(--muted); font-size:0.8rem;">{{ d.location or '—' }} &middot; {{ d.phone or '—' }}</span>
+        </td>
+        <td>
+          {% if d.blood_group %}
+            <span class="bg-pill">{{ d.blood_group }}</span>
+          {% else %}
+            <span class="badge badge-review">Not set</span>
+          {% endif %}
+          <br>
+          <span style="color:var(--muted); font-size:0.78rem;">source: {{ d.blood_group_source or 'manual' }}</span>
+        </td>
+        <td>
+          {% if d.blood_group_detected %}
+            <span class="bg-pill">{{ d.blood_group_detected }}</span>
+          {% else %}
+            <span style="color:var(--muted);">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if d.blood_group_detected_confidence is not none %}
+            {{ "%.0f"|format(d.blood_group_detected_confidence * 100) }}%
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td style="font-size:0.85rem;">
+          {% if d.blood_group_card_name %}<strong>{{ d.blood_group_card_name }}</strong><br>{% endif %}
+          {% if d.blood_group_card_id %}ID: {{ d.blood_group_card_id }}<br>{% endif %}
+          {% if d.blood_group_detected_at %}Detected {{ d.blood_group_detected_at.strftime('%d %b %Y %H:%M') }}{% endif %}
+        </td>
+        <td style="font-size:0.85rem; color:var(--critical);">
+          {% if d.blood_group_flagged %}
+            {{ d.blood_group_flagged_reason or 'Flagged' }}
+          {% else %}
+            <span style="color:var(--medium);">Unverified</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if d.blood_group_image %}
+            <a href="{{ url_for('serve_blood_group_image', filename=d.blood_group_image) }}" target="_blank">
+              <img src="{{ url_for('serve_blood_group_image', filename=d.blood_group_image) }}" alt="Card"
+                   style="width:90px; height:60px; object-fit:cover; border:1px solid var(--line); border-radius:6px;">
+            </a>
+          {% else %}
+            <span style="color:var(--muted); font-size:0.8rem;">—</span>
+          {% endif %}
+        </td>
+        <td style="white-space:nowrap;">
+          <form method="POST" action="{{ url_for('admin_confirm_blood_group', user_id=d.id) }}" style="display:inline-block; vertical-align:top;">
+            <select name="blood_group" style="padding:0.3rem; font-size:0.8rem; margin-bottom:0.3rem;">
+              {% for bg in blood_groups %}
+              <option value="{{ bg }}" {% if d.blood_group_detected == bg %}selected{% endif %}>{{ bg }}</option>
+              {% endfor %}
+            </select><br>
+            <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
+          </form>
+          <form method="POST" action="{{ url_for('admin_reject_blood_group', user_id=d.id) }}" style="display:inline-block;">
+            <button type="submit" class="btn btn-sm btn-outline" onclick="return confirm('Clear the flagged detection for this donor? Their current group is kept.')">Reject</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted); font-size:0.9rem;">No flagged or unverified blood groups.</p>
+  {% endif %}
+</div>
+
+<div class="panel-card" style="margin-top:1.2rem;">
+  <h3>Card Submissions ({{ card_holders|length }})</h3>
+  <p style="font-size:0.85rem; color:var(--muted); margin:0.3rem 0 0.8rem;">
+    Every donor who uploaded a blood group card, most recent first. Detections that
+    matched the donor's current verified group are auto-accepted.
+  </p>
+  {% if card_holders %}
+  <table class="request-table" style="margin-top:0.6rem;">
+    <thead>
+      <tr><th>Donor</th><th>Group</th><th>Detected</th><th>Confidence</th><th>Status</th><th>Card Image</th></tr>
+    </thead>
+    <tbody>
+      {% for d in card_holders %}
+      <tr>
+        <td><strong>{{ d.name }}</strong><br><span style="color:var(--muted); font-size:0.8rem;">{{ d.blood_group_card_name or d.name }}</span></td>
+        <td>
+          {% if d.blood_group %}
+            <span class="bg-pill">{{ d.blood_group }}</span>
+          {% else %}
+            <span style="color:var(--muted);">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if d.blood_group_detected %}
+            <span class="bg-pill">{{ d.blood_group_detected }}</span>
+          {% else %}
+            <span style="color:var(--muted);">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if d.blood_group_detected_confidence is not none %}
+            {{ "%.0f"|format(d.blood_group_detected_confidence * 100) }}%
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td>
+          {% if d.blood_group_verified %}
+            <span class="badge badge-low">Verified</span>
+          {% elif d.blood_group_flagged %}
+            <span class="badge badge-critical">Flagged</span>
+          {% else %}
+            <span class="badge badge-medium">Pending</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if d.blood_group_image %}
+            <a href="{{ url_for('serve_blood_group_image', filename=d.blood_group_image) }}" target="_blank">
+              <img src="{{ url_for('serve_blood_group_image', filename=d.blood_group_image) }}" alt="Card"
+                   style="width:90px; height:60px; object-fit:cover; border:1px solid var(--line); border-radius:6px;">
+            </a>
+          {% else %}
+            <span style="color:var(--muted); font-size:0.8rem;">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted); font-size:0.9rem;">No card submissions yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

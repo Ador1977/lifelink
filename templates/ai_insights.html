@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}AI Insights — LifeLink{% endblock %}
+{% block content %}
+<h2>AI Model Insights</h2>
+<p style="color: var(--muted); margin-bottom: 1.5rem;">Technical details about the machine learning models powering the platform.</p>
+
+<div class="card-grid">
+  <div class="panel-card">
+    <h3>Urgency Detection Model</h3>
+    <table style="width:100%; font-size:0.88rem;">
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Algorithm</td><td style="padding:0.3rem 0;"><strong>{{ urgency_info.name }}</strong></td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Estimators</td><td style="padding:0.3rem 0;">{{ urgency_info.n_estimators }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Cross-Val Accuracy</td><td style="padding:0.3rem 0;"><strong>{{ urgency_info.cv_accuracy }}%</strong></td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Features</td><td style="padding:0.3rem 0;">{{ urgency_info.features|join(", ") }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Labels</td><td style="padding:0.3rem 0;">
+        {% for k, v in urgency_info.label_map.items() %}<span style="margin-right:0.5rem;">{{ v }}: {{ k }}</span>{% endfor %}
+      </td></tr>
+    </table>
+    {% if urgency_info.class_report %}
+    <h4 style="margin-top:1rem; margin-bottom:0.5rem; font-size:0.9rem;">Classification Report</h4>
+    <table class="request-table" style="font-size:0.78rem;">
+      <thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead>
+      <tbody>
+        {% for label, metrics in urgency_info.class_report.items() %}
+          {% if metrics is mapping %}
+          <tr>
+            <td>{{ label }}</td>
+            <td>{{ "%.1f"|format(metrics.precision * 100) }}%</td>
+            <td>{{ "%.1f"|format(metrics.recall * 100) }}%</td>
+            <td>{{ "%.1f"|format(metrics['f1-score'] * 100) }}%</td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <div class="panel-card">
+    <h3>Health Screening Model</h3>
+    <table style="width:100%; font-size:0.88rem;">
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Algorithm</td><td style="padding:0.3rem 0;"><strong>{{ health_info.name }}</strong></td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Estimators</td><td style="padding:0.3rem 0;">{{ health_info.n_estimators }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Cross-Val Accuracy</td><td style="padding:0.3rem 0;"><strong>{{ health_info.cv_accuracy }}%</strong></td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Features</td><td style="padding:0.3rem 0;">{{ health_info.features|join(", ") }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Labels</td><td style="padding:0.3rem 0;">
+        {% for k, v in health_info.label_map.items() %}<span style="margin-right:0.5rem;">{{ v }}: {{ k }}</span>{% endfor %}
+      </td></tr>
+    </table>
+    {% if health_info.class_report %}
+    <h4 style="margin-top:1rem; margin-bottom:0.5rem; font-size:0.9rem;">Classification Report</h4>
+    <table class="request-table" style="font-size:0.78rem;">
+      <thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead>
+      <tbody>
+        {% for label, metrics in health_info.class_report.items() %}
+          {% if metrics is mapping %}
+          <tr>
+            <td>{{ label }}</td>
+            <td>{{ "%.1f"|format(metrics.precision * 100) }}%</td>
+            <td>{{ "%.1f"|format(metrics.recall * 100) }}%</td>
+            <td>{{ "%.1f"|format(metrics['f1-score'] * 100) }}%</td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  <div class="panel-card">
+    <h3>Donor Recommendation Model</h3>
+    <table style="width:100%; font-size:0.88rem;">
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Algorithm</td><td style="padding:0.3rem 0;"><strong>{{ recommender_info.name }}</strong></td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Estimators</td><td style="padding:0.3rem 0;">{{ recommender_info.n_estimators }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Test R&#178;</td><td style="padding:0.3rem 0;"><strong>{{ recommender_info.r2 }}</strong></td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Features</td><td style="padding:0.3rem 0;">{{ recommender_info.features|join(", ") }}</td></tr>
+      <tr><td style="color:var(--muted); padding:0.3rem 0;">Output</td><td style="padding:0.3rem 0;">{{ recommender_info.label }}</td></tr>
+    </table>
+    {% if recommender_info.feature_importances %}
+    <h4 style="margin-top:1rem; margin-bottom:0.5rem; font-size:0.9rem;">Learned Feature Importances</h4>
+    <table class="request-table" style="font-size:0.8rem;">
+      <thead><tr><th>Feature</th><th>Importance</th></tr></thead>
+      <tbody>
+        {% for feat, imp in recommender_info.feature_importances.items() %}
+        <tr>
+          <td>{{ feat }}</td>
+          <td>
+            <div class="score-bar" style="max-width:220px;"><span style="width: {{ imp * 100 }}%;"></span></div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<h3 class="section-title" style="margin-top:2rem;">Recent Predictions (Last 50)</h3>
+{% if recent_predictions %}
+<table class="request-table">
+  <thead>
+    <tr><th>Time</th><th>Model</th><th>Prediction</th><th>Confidence</th><th>User</th></tr>
+  </thead>
+  <tbody>
+    {% for p in recent_predictions %}
+    <tr>
+      <td style="font-family:var(--font-mono); font-size:0.8rem;">{{ p.created_at.strftime('%d %b %H:%M:%S') if p.created_at else '' }}</td>
+      <td>{{ p.model_type }}</td>
+      <td><strong>{{ p.prediction }}</strong></td>
+      <td>{{ p.confidence }}%</td>
+      <td style="font-size:0.8rem; color:var(--muted);">{{ p.user_id }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:var(--muted);">No predictions logged yet.</p>
+{% endif %}
+{% endblock %}
