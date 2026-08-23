@@ -1,0 +1,1 @@
+services: - type: web name: lifelink runtime: docker plan: free envVars: - key: SECRET_KEY generateValue: true - key: DATABASE_URL sync: false - key: MAIL_SERVER value: smtp.gmail.com - key: MAIL_PORT value: 587 - key: MAIL_USE_TLS value: "True" - key: MAIL_USERNAME sync: false - key: MAIL_PASSWORD sync: false - key: GOOGLE_MAPS_API_KEY sync: false
